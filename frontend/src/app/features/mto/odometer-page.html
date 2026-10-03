@@ -1,0 +1,85 @@
+<div class="page">
+  <app-page-header
+    title="Odometer"
+    subtitle="Drivers enter the reading for the most recent Sunday every week."
+  />
+
+  <div class="cards">
+    <section id="missing-card" class="card" aria-labelledby="missing-title">
+      <h2 id="missing-title">Missing this week</h2>
+      @if (missing.loading()) {
+        <p class="muted" role="status">Loading missing readings…</p>
+      } @else if (missing.error()) {
+        <app-load-error [message]="missing.error()" (retry)="missing.load()" small />
+      } @else if (!missing.data()?.length) {
+        <app-empty-state
+          icon="check-circle"
+          title="No missing readings."
+          text="Every vehicle with a driver has this week's reading."
+        />
+      } @else {
+        <ul class="list">
+          @for (row of missing.data(); track row.vehicle) {
+            <li class="list-row missing-row">
+              <span class="who">
+                <span class="registration">{{ row.registration_number }}</span>
+                <span class="muted">{{ row.driver_name }}</span>
+              </span>
+              <span class="muted">Week of {{ formatDate(row.week_of) }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+
+    <section id="readings-card" class="card" aria-labelledby="readings-title">
+      <h2 id="readings-title">Readings by vehicle</h2>
+      @if (vehicles.loading()) {
+        <p class="muted" role="status">Loading vehicles…</p>
+      } @else if (vehicles.error()) {
+        <app-load-error [message]="vehicles.error()" (retry)="vehicles.load()" small />
+      } @else {
+        <div class="field vehicle-field">
+          <label for="odometer-vehicle">Vehicle</label>
+          <select #vehicleSelect id="odometer-vehicle" (change)="choose(vehicleSelect.value)">
+            <option value="">Choose a vehicle</option>
+            @for (vehicle of vehicles.data(); track vehicle.id) {
+              <option [value]="vehicle.id">{{ vehicle.registration_number }}</option>
+            }
+          </select>
+        </div>
+
+        @if (vehicleId() === null) {
+          <p class="muted">Choose a vehicle to see its readings.</p>
+        } @else if (readings.loading()) {
+          <p class="muted" role="status">Loading readings…</p>
+        } @else if (readings.error()) {
+          <app-load-error [message]="readings.error()" (retry)="readings.load()" small />
+        } @else if (!readings.data()?.length) {
+          <p class="muted">No readings yet for this vehicle.</p>
+        } @else {
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th scope="col">Week of</th>
+                  <th scope="col">Reading</th>
+                  <th scope="col">Since previous</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (reading of readings.data(); track reading.id) {
+                  <tr>
+                    <td>{{ formatDate(reading.week_of) }}</td>
+                    <td>{{ km(reading.reading_km) }}</td>
+                    <td>{{ km(reading.km_since_previous) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    </section>
+  </div>
+</div>

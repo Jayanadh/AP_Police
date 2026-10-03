@@ -1,0 +1,115 @@
+<div class="page">
+  <app-page-header [title]="greeting()" [subtitle]="subtitle()" />
+
+  <section id="mto-card" class="card mto" aria-label="Your MTO office">
+    @if (mine.loading()) {
+      <p class="muted" role="status">Loading your MTO…</p>
+    } @else if (mine.error()) {
+      <app-load-error [message]="mine.error()" (retry)="mine.load()" small />
+    } @else if (mine.data(); as data) {
+      <div class="mto-who">
+        <h2 class="muted">Your MTO office</h2>
+        <span class="office">{{ data.mto.unit_name }}</span>
+        <span>{{ data.mto.full_name || 'No MTO named yet' }}</span>
+      </div>
+      @if (data.mto.mobile; as phone) {
+        <a class="btn btn-primary" [href]="'tel:' + phone">
+          <app-icon name="phone" [size]="20" />
+          Call {{ phone }}
+        </a>
+      } @else {
+        <p class="muted">No contact number on file</p>
+      }
+    }
+  </section>
+
+  @if (dashboard.loading()) {
+    <p class="muted notice" role="status">Loading your vehicles…</p>
+  } @else if (dashboard.error()) {
+    <div class="card notice">
+      <app-load-error [message]="dashboard.error()" (retry)="dashboard.load()" />
+    </div>
+  } @else if (dashboard.data(); as data) {
+    <div class="panels">
+      <section aria-labelledby="vehicles-title">
+        <h2 id="vehicles-title" class="sr-only">Your vehicles</h2>
+        @if (!data.vehicles.length) {
+          <div class="card">
+            <app-empty-state
+              icon="car"
+              title="No vehicle is linked to you yet."
+              text="Ask your MTO to link one."
+            />
+          </div>
+        } @else {
+          <ul class="vehicles">
+            @for (vehicle of data.vehicles; track vehicle.id) {
+              @let share = usage(vehicle.used_litres, vehicle.limit_litres);
+              <li class="card vehicle">
+                <div>
+                  <span class="registration">{{ vehicle.registration_number }}</span>
+                  <span class="model muted">{{ vehicle.make }} {{ vehicle.model }}</span>
+                </div>
+                <p class="driver">
+                  @if (vehicle.driver_name) {
+                    <app-icon name="user" [size]="16" />
+                    <span>{{ vehicle.driver_name }}</span>
+                    @if (driverPhone(vehicle.id); as phone) {
+                      <a [href]="'tel:' + phone">{{ phone }}</a>
+                    }
+                  } @else {
+                    No driver linked
+                  }
+                </p>
+                <div class="figures">
+                  <span class="limit">Limit {{ litres(vehicle.limit_litres) }}</span>
+                  <span class="used">Used {{ litres(vehicle.used_litres) }}</span>
+                  <span class="remaining">Left {{ litres(vehicle.remaining_litres) }}</span>
+                </div>
+                <div
+                  class="progress"
+                  [class.warning]="share.tone === 'warning'"
+                  [class.danger]="share.tone === 'danger'"
+                  role="progressbar"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  [attr.aria-label]="'Fuel used this month by ' + vehicle.registration_number"
+                  [attr.aria-valuenow]="share.percent"
+                >
+                  <span [style.width.%]="share.percent"></span>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
+      <section id="fills-card" class="card" aria-labelledby="fills-title">
+        <h2 id="fills-title">Recent fills</h2>
+        @if (!data.recent_fills.length) {
+          <p class="muted">No fills yet. They show up here after a driver fills at a pump.</p>
+        } @else {
+          <ul class="fills">
+            @for (fill of data.recent_fills; track fill.id) {
+              <li class="fill">
+                <div class="top">
+                  <span>{{ fill.registration_number }}</span>
+                  <span>{{ litres(fill.litres_filled) }}</span>
+                </div>
+                <p class="muted">{{ fill.pump_name }} · {{ formatDateTime(fill.filled_at) }}</p>
+                <p class="duty">
+                  @if (fill.duty_particulars) {
+                    {{ fill.duty_particulars }}
+                  } @else {
+                    <span class="muted">Duty particulars not entered yet</span>
+                  }
+                </p>
+              </li>
+            }
+          </ul>
+        }
+        <a class="btn btn-secondary btn-sm more" routerLink="/officer/fuel">Fuel statement</a>
+      </section>
+    </div>
+  }
+</div>

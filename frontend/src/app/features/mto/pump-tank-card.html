@@ -1,0 +1,114 @@
+<section class="card" [attr.aria-labelledby]="'tank-' + tankId() + '-title'">
+  <div class="head">
+    <h3 [id]="'tank-' + tankId() + '-title'">{{ fuel() }}</h3>
+    @if (tank().is_low) {
+      <span class="badge badge-danger">Low</span>
+    }
+  </div>
+
+  <div
+    class="progress"
+    [class.danger]="tank().is_low"
+    role="meter"
+    aria-valuemin="0"
+    aria-valuemax="100"
+    [attr.aria-label]="fuel() + ' level'"
+    [attr.aria-valuenow]="percent().toFixed(0)"
+    [attr.aria-valuetext]="litres(tank().current_stock_litres)"
+  >
+    <span [style.width.%]="percent()"></span>
+  </div>
+
+  <div class="stats">
+    <app-stat-card
+      icon="droplet"
+      label="In stock"
+      [value]="litres(tank().current_stock_litres)"
+      [tone]="tank().is_low ? 'danger' : 'primary'"
+    />
+    <app-stat-card
+      icon="alert-triangle"
+      label="Alert below"
+      [value]="litres(tank().low_stock_threshold_litres)"
+    />
+    <app-stat-card
+      icon="gauge"
+      label="Capacity"
+      [value]="tank().capacity_litres === null ? 'Not set' : litres(tank().capacity_litres)"
+    />
+  </div>
+
+  <form class="levels" [formGroup]="levels" (ngSubmit)="save()">
+    <div class="form-grid">
+      <div class="field">
+        <label [for]="'tank-' + tankId() + '-threshold'">Alert level (L)</label>
+        <input
+          [id]="'tank-' + tankId() + '-threshold'"
+          type="number"
+          inputmode="decimal"
+          step="any"
+          formControlName="threshold"
+        />
+      </div>
+      <div class="field">
+        <label [for]="'tank-' + tankId() + '-capacity'">Capacity (L)</label>
+        <input
+          [id]="'tank-' + tankId() + '-capacity'"
+          type="number"
+          inputmode="decimal"
+          step="any"
+          formControlName="capacity"
+        />
+      </div>
+    </div>
+    @if (error()) {
+      <p class="error" role="alert">{{ error() }}</p>
+    }
+    <button type="submit" class="btn btn-secondary btn-sm" [disabled]="saving()">
+      Save levels
+    </button>
+  </form>
+
+  <div class="entries">
+    <h4>Stock entries</h4>
+    @if (entries.error()) {
+      <app-load-error [message]="entries.error()" (retry)="entries.load()" small />
+    } @else if (entries.loading()) {
+      <p class="muted" role="status">Loading entries…</p>
+    } @else if (!entries.data()?.length) {
+      <p class="muted no-entries">No stock entries this month.</p>
+    } @else {
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">Entry</th>
+              <th scope="col">Litres</th>
+              <th scope="col">Before → after</th>
+              <th scope="col">By</th>
+              <th scope="col">When</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of entries.data(); track row.id) {
+              <tr>
+                <td>
+                  {{ row.kind_label }}
+                  @if (row.note) {
+                    <div class="sub">{{ row.note }}</div>
+                  }
+                </td>
+                <td class="number">{{ litres(row.litres) }}</td>
+                <td class="number">
+                  {{ litres(row.stock_before) }} → {{ litres(row.stock_after) }}
+                </td>
+                <td>{{ row.recorded_by_name }}</td>
+                <td>{{ formatDateTime(row.recorded_at) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</section>

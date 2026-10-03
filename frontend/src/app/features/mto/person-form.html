@@ -1,0 +1,114 @@
+<form class="card" [formGroup]="form" (ngSubmit)="save()">
+  <h2>{{ adding() ? 'Add ' + noun() : 'Edit ' + person()!.full_name }}</h2>
+
+  @if (loading()) {
+    <p class="muted" role="status">Loading…</p>
+  } @else if (loadError()) {
+    <p class="error" role="alert">{{ loadError() }}</p>
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary retry" (click)="load()">Try again</button>
+      <button type="button" class="btn btn-ghost" (click)="cancelled.emit()">Cancel</button>
+    </div>
+  } @else {
+    @if (adding() && !isDriver()) {
+      <p class="muted hint">The PTO has to approve a new officer before they can log in.</p>
+    }
+    <div class="form-grid">
+      <div class="field">
+        <label for="person-name">Name</label>
+        <input
+          #nameField
+          id="person-name"
+          type="text"
+          formControlName="full_name"
+          autocomplete="off"
+        />
+      </div>
+      <div class="field">
+        <label for="person-emp">Emp ID</label>
+        <input
+          id="person-emp"
+          type="text"
+          formControlName="emp_id"
+          autocomplete="off"
+          autocapitalize="characters"
+        />
+      </div>
+      <div class="field">
+        <label for="person-designation">Designation</label>
+        <select id="person-designation" formControlName="designation">
+          <option [ngValue]="null" disabled>Select designation</option>
+          @for (designation of designationOptions(); track designation.id) {
+            <option [ngValue]="designation.id">{{ designation.name }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="person-district">District</label>
+        <select id="person-district" formControlName="district">
+          <option [ngValue]="null" disabled>Select district</option>
+          @for (district of districtOptions(); track district.id) {
+            <option [ngValue]="district.id">{{ district.name }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="person-cadre">Cadre</label>
+        <select id="person-cadre" formControlName="cadre">
+          <option [ngValue]="null" disabled>Select cadre</option>
+          @for (cadre of cadreOptions(); track cadre.id) {
+            <option [ngValue]="cadre.id">{{ cadre.name }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="person-mobile">Mobile</label>
+        <input
+          id="person-mobile"
+          type="tel"
+          inputmode="numeric"
+          maxlength="10"
+          formControlName="mobile"
+          autocomplete="off"
+        />
+      </div>
+      @if (isDriver()) {
+        <div class="field">
+          <label for="person-licence">Licence number</label>
+          <input
+            id="person-licence"
+            type="text"
+            formControlName="licence_number"
+            autocomplete="off"
+          />
+        </div>
+        <div class="field">
+          <label for="person-licence-till">Licence valid till</label>
+          <input id="person-licence-till" type="date" formControlName="licence_valid_till" />
+        </div>
+      }
+      @if (adding()) {
+        <div class="field">
+          <label for="person-password">First password</label>
+          <input
+            id="person-password"
+            type="password"
+            formControlName="password"
+            autocomplete="new-password"
+          />
+          <p class="muted hint">They will be asked to change it when they first log in.</p>
+        </div>
+      }
+    </div>
+
+    @if (error()) {
+      <p class="error" role="alert">{{ error() }}</p>
+    }
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" [disabled]="saving()">
+        {{ adding() ? 'Add ' + noun() : 'Save changes' }}
+      </button>
+      <button type="button" class="btn btn-ghost" (click)="cancelled.emit()">Cancel</button>
+    </div>
+  }
+</form>

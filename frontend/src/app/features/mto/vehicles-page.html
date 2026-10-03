@@ -1,0 +1,106 @@
+<div class="page">
+  <app-page-header title="Vehicles" subtitle="The vehicles of your office and who drives them.">
+    <button
+      type="button"
+      class="btn btn-primary"
+      aria-controls="vehicle-form"
+      [attr.aria-expanded]="formOpen()"
+      (click)="formOpen.set(true)"
+    >
+      <app-icon name="plus" [size]="18" />
+      Add vehicle
+    </button>
+  </app-page-header>
+
+  @if (formOpen()) {
+    <div id="vehicle-form" class="form-slot">
+      <app-vehicle-form (saved)="saved()" (cancelled)="formOpen.set(false)" />
+    </div>
+  }
+
+  <div class="toolbar">
+    <form class="search" role="search" (submit)="applySearch($event)">
+      <div class="field">
+        <label for="vehicles-search" class="sr-only">Search by registration number</label>
+        <input
+          #box
+          id="vehicles-search"
+          type="search"
+          placeholder="Search by registration number"
+          autocomplete="off"
+          [value]="searchText()"
+          (input)="typeSearch(box.value)"
+        />
+      </div>
+      <button type="submit" class="btn-icon" aria-label="Search">
+        <app-icon name="search" [size]="20" />
+      </button>
+    </form>
+    <div class="chips" role="group" aria-label="Filter by status">
+      @for (chip of chips; track chip.label) {
+        <button
+          type="button"
+          class="chip"
+          [class.active]="status() === chip.value"
+          [attr.aria-pressed]="status() === chip.value"
+          (click)="choose(chip.value)"
+        >
+          {{ chip.label }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (vehicles.loading()) {
+    <p class="muted" role="status">Loading vehicles…</p>
+  } @else if (vehicles.error()) {
+    <div class="card">
+      <app-load-error [message]="vehicles.error()" (retry)="vehicles.load()" />
+    </div>
+  } @else if (!vehicles.data()?.length) {
+    <div class="card">
+      <app-empty-state
+        icon="car"
+        [title]="filtered() ? 'No vehicles match' : 'No vehicles yet'"
+        [text]="
+          filtered()
+            ? 'Try a different search or status.'
+            : 'Add your first vehicle to get started.'
+        "
+      />
+    </div>
+  } @else {
+    <ul class="vehicles">
+      @for (vehicle of vehicles.data(); track vehicle.id) {
+        <li>
+          <a class="card vehicle" [routerLink]="['/mto/vehicles', vehicle.id]">
+            <div class="top">
+              <div>
+                <span class="registration">{{ vehicle.registration_number }}</span>
+                <div class="make">
+                  <span class="muted">{{ vehicle.make }} {{ vehicle.model }}</span>
+                  <span class="chip fuel">{{ fuelLabel(vehicle.fuel_type) }}</span>
+                </div>
+              </div>
+              <app-status-badge [status]="vehicle.status" />
+            </div>
+            <dl class="rows">
+              <div data-role="officer">
+                <dt>Officer</dt>
+                <dd>{{ vehicle.current_officer?.full_name || 'Not linked' }}</dd>
+              </div>
+              <div data-role="driver">
+                <dt>Driver</dt>
+                <dd>{{ vehicle.current_driver?.full_name || 'Not linked' }}</dd>
+              </div>
+              <div>
+                <dt>Monthly limit</dt>
+                <dd>{{ litres(vehicle.monthly_fuel_limit_litres) }}</dd>
+              </div>
+            </dl>
+          </a>
+        </li>
+      }
+    </ul>
+  }
+</div>

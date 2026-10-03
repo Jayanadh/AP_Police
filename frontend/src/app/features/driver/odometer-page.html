@@ -1,0 +1,106 @@
+<div class="page">
+  <app-page-header
+    title="Odometer"
+    subtitle="Enter the reading for the most recent Sunday, every week."
+  />
+
+  @if (vehicles.loading() || readings.loading()) {
+    <p class="muted" role="status">Loading your readings…</p>
+  } @else if (vehicles.error() || readings.error()) {
+    <div class="card">
+      <app-load-error
+        [message]="vehicles.error() || readings.error()"
+        (retry)="vehicles.load(); readings.load()"
+      />
+    </div>
+  } @else if (!vehicle()) {
+    <section class="card">
+      <app-empty-state
+        icon="car"
+        title="You are not linked to a vehicle yet."
+        text="Contact your MTO."
+      />
+    </section>
+  } @else {
+    <div class="layout">
+      <section id="week-card" class="card card-hero" aria-labelledby="week-title">
+        <div class="head">
+          <span class="round"><app-icon name="gauge" [size]="24" /></span>
+          <div>
+            <h2 id="week-title">Week of {{ formatDate(week) }}</h2>
+            <p class="muted">{{ vehicle()!.registration_number }}</p>
+          </div>
+        </div>
+
+        @if (thisWeek(); as reading) {
+          <div class="recorded">
+            <app-icon name="check-circle" [size]="28" />
+            <div>
+              <span class="muted">Recorded</span>
+              <strong>{{ km(reading.reading_km) }}</strong>
+            </div>
+          </div>
+        } @else {
+          <form novalidate [formGroup]="form" (ngSubmit)="save()">
+            <div class="field">
+              <label for="odometer-km">Reading (km)</label>
+              <input
+                id="odometer-km"
+                type="number"
+                inputmode="numeric"
+                min="0"
+                step="1"
+                formControlName="reading_km"
+                [attr.aria-invalid]="fieldError() ? true : null"
+                [attr.aria-describedby]="fieldError() ? 'odometer-km-error' : null"
+              />
+              @if (fieldError()) {
+                <p id="odometer-km-error" class="field-error">{{ fieldError() }}</p>
+              }
+            </div>
+            @if (last(); as reading) {
+              <p class="muted">Last reading: {{ km(reading.reading_km) }}</p>
+            } @else {
+              <p class="muted">At onboarding: {{ km(vehicle()!.odometer_at_onboarding_km) }}</p>
+            }
+            @if (error()) {
+              <p class="error" role="alert">{{ error() }}</p>
+            }
+            <button type="submit" class="btn btn-primary btn-block" [disabled]="saving()">
+              Save reading
+            </button>
+          </form>
+        }
+      </section>
+
+      <section id="readings-card" class="card" aria-labelledby="readings-title">
+        <h2 id="readings-title">Readings</h2>
+        @if (!readings.data()?.length) {
+          <app-empty-state
+            icon="gauge"
+            title="No readings yet."
+            text="Your Sunday readings show here."
+          />
+        } @else {
+          <ul class="list">
+            @for (reading of readings.data(); track reading.id) {
+              <li class="list-row reading">
+                <span>
+                  <span class="figure">{{ km(reading.reading_km) }}</span>
+                  <span class="muted"> · Week of {{ formatDate(reading.week_of) }}</span>
+                </span>
+                <span class="since muted">
+                  @if (reading.km_since_previous === null) {
+                    First reading
+                  } @else {
+                    +{{ km(reading.km_since_previous) }}
+                  }
+                </span>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    </div>
+  }
+</div>

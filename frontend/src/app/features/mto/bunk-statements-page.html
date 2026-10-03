@@ -1,0 +1,106 @@
+<div class="page">
+  <app-page-header title="Bunk statements" [subtitle]="subtitle()" />
+
+  <section class="card controls" aria-label="Pump and period">
+    <app-period-picker [period]="period()" (periodChange)="choosePeriod($event)" />
+    <div class="pickers">
+      @if (isPto()) {
+        <app-office-select
+          class="office"
+          inputId="statements-unit"
+          (officeChange)="chooseUnit($event)"
+        />
+      }
+      <div class="field pump">
+        <label for="statement-pump">Pump</label>
+        <select
+          #pumpSelect
+          id="statement-pump"
+          [disabled]="!pumps.data()?.length"
+          (change)="choosePump(pumpSelect.value)"
+        >
+          @for (pump of pumps.data() ?? []; track pump.id) {
+            <option [value]="pump.id" [selected]="pump.id === pumpId()">
+              {{ pumpLabel(pump) }}
+            </option>
+          }
+        </select>
+      </div>
+      @if (pumpId() !== null) {
+        <app-download-button [url]="exportUrl" [params]="downloadParams()" />
+      }
+    </div>
+  </section>
+
+  <section id="statement" aria-labelledby="statement-title">
+    @if (pumps.loading()) {
+      <p class="muted" role="status">Loading the pumps…</p>
+    } @else if (pumps.error()) {
+      <div class="card">
+        <app-load-error [message]="pumps.error()" (retry)="pumps.load()" />
+      </div>
+    } @else if (!pumps.data()?.length) {
+      <div class="card">
+        <app-empty-state
+          icon="fuel"
+          title="No pumps yet."
+          text="A statement shows every fill at a police pump or tie-up bunk once one is added."
+        />
+      </div>
+    } @else if (statement.loading()) {
+      <p class="muted" role="status">Loading the statement…</p>
+    } @else if (statement.error()) {
+      <div class="card">
+        <app-load-error [message]="statement.error()" (retry)="statement.load()" />
+      </div>
+    } @else if (statement.data(); as data) {
+      <h2 id="statement-title">{{ data.pump.name }} · {{ data.label }}</h2>
+      @if (isPto()) {
+        <p class="muted office-name">{{ data.pump.unit_name }}</p>
+      }
+      <div class="totals">
+        <app-stat-card icon="fuel" label="Fills" [value]="data.fills" />
+        <app-stat-card icon="droplet" label="Petrol" [value]="litres(data.petrol_litres)" />
+        <app-stat-card icon="droplet" label="Diesel" [value]="litres(data.diesel_litres)" />
+        <app-stat-card icon="fuel" label="Total" tone="primary" [value]="litres(data.litres)" />
+      </div>
+
+      <div id="fills" class="card">
+        @if (!data.rows.length) {
+          <app-empty-state
+            icon="fuel"
+            title="No fills at this pump in this period."
+            text="Every fill made here shows up in its statement."
+          />
+        } @else {
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th scope="col">Date</th>
+                  <th scope="col">Vehicle</th>
+                  <th scope="col">Office</th>
+                  <th scope="col">Driver</th>
+                  <th scope="col">Fuel</th>
+                  <th scope="col">Litres</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of data.rows; track row.id) {
+                  <tr>
+                    <td>{{ formatDateTime(row.filled_at) }}</td>
+                    <th scope="row">{{ row.registration_number }}</th>
+                    <td>{{ row.unit_name }}</td>
+                    <td>{{ row.driver_name }}</td>
+                    <td>{{ fuelLabel(row.fuel_type) }}</td>
+                    <td>{{ litres(row.litres) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    }
+  </section>
+</div>

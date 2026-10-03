@@ -1,0 +1,21 @@
+<div class="page">
+  <app-page-header title="Profile" [subtitle]="roleLabel()" />
+
+  <section class="card">
+    <ul class="list">
+      @for (row of rows(); track row.label) {
+        <li class="list-row">
+          <span class="muted">{{ row.label }}</span>
+          <strong class="value">{{ row.value }}</strong>
+        </li>
+      }
+    </ul>
+  </section>
+
+  <div class="actions">
+    <a class="btn btn-secondary" routerLink="/change-password">
+      <app-icon name="lock" [size]="18" />
+      Change password
+    </a>
+  </div>
+</div>

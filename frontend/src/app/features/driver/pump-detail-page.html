@@ -1,0 +1,101 @@
+@if (directory.loading()) {
+  <div class="page">
+    <p class="muted" role="status">Loading the pump…</p>
+  </div>
+} @else if (directory.error()) {
+  <div class="page">
+    <div class="card">
+      <app-load-error [message]="directory.error()" (retry)="directory.load()" />
+    </div>
+  </div>
+} @else if (pump(); as pump) {
+  <div class="station">
+    <div class="hero">
+      <a class="btn-icon back" routerLink="/driver/pumps" aria-label="Back to pumps">
+        <app-icon name="chevron-left" [size]="24" />
+      </a>
+      <app-hero-illustration />
+    </div>
+
+    <section class="panel" aria-labelledby="pump-name">
+      <div class="name-row">
+        <h1 id="pump-name">{{ pump.name }}</h1>
+        <span
+          class="badge kind"
+          [class.badge-info]="pump.kind === 'POLICE'"
+          [class.badge-warning]="pump.kind === 'TIE_UP'"
+          >{{ pump.kind_label }}</span
+        >
+      </div>
+
+      <div class="location">
+        <div class="where">
+          <span class="label">Location</span>
+          <p class="address">{{ pumpWhere(pump) }}</p>
+        </div>
+        <a
+          class="btn-icon navigate"
+          [href]="directions()"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Directions in Google Maps"
+          title="Directions in Google Maps"
+        >
+          <app-icon name="navigation" [size]="20" />
+        </a>
+      </div>
+
+      <div class="stats">
+        <app-stat-card icon="map-pin" label="Distance" [value]="distance()" />
+        <app-stat-card icon="clock" label="Opening" [value]="pump.opening_hours || '—'" />
+      </div>
+
+      <h2 class="label">Available fuel</h2>
+      <ul class="fuel-chips">
+        @for (fuel of fuels(); track fuel.value) {
+          <li class="chip" [class.active]="fuel.available" [class.unavailable]="!fuel.available">
+            {{ fuel.label }}
+            <span class="sr-only">{{ fuel.available ? 'available' : 'not available' }}</span>
+          </li>
+        }
+      </ul>
+      @if (missingFuel(); as missing) {
+        <p class="fuel-warning" role="note">
+          <app-icon name="alert-triangle" [size]="16" />
+          {{ missing }} is not available here right now.
+        </p>
+      }
+
+      <div class="fill-bar">
+        <div class="uses">
+          @if (vehicle(); as vehicle) {
+            <span class="label">Your vehicle uses</span>
+            <strong>{{ fuelLabel(vehicle.fuel_type) }}</strong>
+          } @else if (noVehicle()) {
+            <p class="muted">You are not linked to a vehicle yet.</p>
+          }
+        </div>
+        @if (!noVehicle()) {
+          <a
+            class="btn btn-primary fill-up"
+            routerLink="/driver/fuel"
+            [queryParams]="{ pump: pump.id }"
+            >Fill Up</a
+          >
+        }
+      </div>
+    </section>
+  </div>
+} @else {
+  <div class="page">
+    <div class="card">
+      <app-empty-state
+        icon="fuel"
+        title="Pump not found"
+        text="It may have been closed. Pick another pump from the list."
+      >
+        <a class="btn btn-secondary" routerLink="/driver/pumps">Back to pumps</a>
+      </app-empty-state>
+    </div>
+  </div>
+}

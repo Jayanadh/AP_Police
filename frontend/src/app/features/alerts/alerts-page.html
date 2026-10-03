@@ -1,0 +1,57 @@
+<div class="page">
+  <app-page-header title="Alerts">
+    @if (alerts().length) {
+      <button
+        type="button"
+        class="btn btn-secondary"
+        [disabled]="unreadCount() === 0"
+        (click)="markAllRead()"
+      >
+        <app-icon name="check" [size]="18" />
+        Mark all as read
+      </button>
+    }
+  </app-page-header>
+
+  @if (loading()) {
+    <p class="muted" role="status">Loading alerts…</p>
+  } @else if (error()) {
+    <div class="card">
+      <app-load-error [message]="error()" (retry)="load()" />
+    </div>
+  } @else if (!alerts().length) {
+    <div class="card">
+      <app-empty-state
+        icon="bell"
+        title="No alerts yet"
+        text="Updates about your vehicles, fuel and requests will show up here."
+      />
+    </div>
+  } @else {
+    <ul class="list card alerts">
+      @for (alert of alerts(); track alert.id) {
+        <li>
+          <button
+            type="button"
+            class="alert-item"
+            [class.unread]="!alert.read_at"
+            (click)="open(alert)"
+          >
+            <span class="alert-main">
+              <span class="alert-title">{{ alert.title }}</span>
+              @if (alert.body) {
+                <span class="alert-body muted">{{ alert.body }}</span>
+              }
+              <time class="alert-time muted" [attr.datetime]="alert.created_at">{{
+                when(alert.created_at)
+              }}</time>
+            </span>
+            @if (alert.link) {
+              <app-icon name="chevron-right" [size]="18" />
+            }
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</div>

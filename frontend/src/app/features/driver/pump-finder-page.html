@@ -1,0 +1,138 @@
+<div class="finder" [class.search-open]="searchOpen()">
+  <div class="map-area">
+    <app-map-view
+      [markers]="markers()"
+      [center]="mapCenter()"
+      [zoom]="zoom()"
+      [touchDrag]="true"
+      (markerClick)="openPump($event)"
+    />
+    <div class="map-top">
+      <div class="search-field">
+        <app-icon name="search" [size]="20" />
+        <label class="sr-only" for="pump-search">Search pumps by name, address or district</label>
+        <input
+          id="pump-search"
+          type="search"
+          placeholder="Name, address or district"
+          autocomplete="off"
+          enterkeyhint="search"
+          [value]="search()"
+          (input)="onSearch($event)"
+          (keydown.escape)="closeSearch()"
+        />
+      </div>
+      <button
+        type="button"
+        class="btn-icon search-toggle"
+        [attr.aria-label]="searchOpen() ? 'Close search' : 'Search pumps'"
+        [attr.aria-expanded]="searchOpen()"
+        aria-controls="pump-search"
+        (click)="toggleSearch()"
+      >
+        <app-icon [name]="searchOpen() ? 'x' : 'search'" [size]="22" />
+      </button>
+      <button
+        type="button"
+        class="btn-icon"
+        aria-label="Show my location"
+        [disabled]="locating()"
+        (click)="locate()"
+      >
+        <app-icon name="navigation" [size]="20" />
+      </button>
+    </div>
+  </div>
+
+  <section class="sheet panel" aria-labelledby="finder-title">
+    @if (pumps.loading()) {
+      <h1 id="finder-title" class="title">Looking for petrol stations…</h1>
+    } @else if (pumps.error()) {
+      <h1 id="finder-title" class="title">Petrol stations</h1>
+      <app-load-error [message]="pumps.error()" (retry)="pumps.load()" />
+    } @else {
+      <h1 id="finder-title" class="title">{{ title() }}</h1>
+
+      <div class="fuel-chips" role="group" aria-label="Filter by fuel">
+        @for (chip of fuelChips; track chip.value) {
+          <button
+            type="button"
+            class="chip"
+            [class.active]="fuel() === chip.value"
+            [attr.aria-pressed]="fuel() === chip.value"
+            (click)="fuel.set(chip.value)"
+          >
+            {{ chip.label }}
+          </button>
+        }
+      </div>
+
+      @if (locating()) {
+        <p class="location-note" role="status">Finding your location…</p>
+      } @else if (!location()) {
+        <div class="location-note">
+          <p>Turn on location to see the nearest pumps.</p>
+          <button type="button" class="btn btn-primary btn-sm" (click)="locate()">
+            Use my location
+          </button>
+        </div>
+      }
+
+      @if (!rows().length) {
+        <app-empty-state
+          icon="fuel"
+          title="No pumps match your search."
+          text="Try another name or district, or another fuel."
+        >
+          <button type="button" class="btn btn-secondary" (click)="clearFilters()">
+            Clear filters
+          </button>
+        </app-empty-state>
+      } @else {
+        <ul #cardStrip class="carousel" aria-label="Pumps, nearest first">
+          @for (row of strip(); track row.pump.id) {
+            <li>
+              <a class="pump-card" [routerLink]="['/driver/pumps', row.pump.id]">
+                <span class="art" [class.tieup]="row.pump.kind === 'TIE_UP'">
+                  <span class="badge kind">{{ row.pump.kind_label }}</span>
+                  <span class="art-icon"><app-icon name="fuel" [size]="26" /></span>
+                </span>
+                <span class="pump-name">{{ row.pump.name }}</span>
+                <span class="pump-where">{{ pumpWhere(row.pump) }}</span>
+                <span class="meta">
+                  <span class="pump-distance">
+                    <app-icon name="map-pin" [size]="15" />{{ formatDistance(row.km) }}
+                  </span>
+                  <span class="pump-time">
+                    <app-icon name="clock" [size]="15" />{{ formatTravelTime(row.km) }}
+                  </span>
+                </span>
+              </a>
+            </li>
+          }
+        </ul>
+
+        <h2 class="nearest-title">{{ location() ? 'Most nearest' : 'All pumps' }}</h2>
+        <ul class="nearest">
+          @for (row of rows(); track row.pump.id) {
+            <li>
+              <a class="pump-row" [routerLink]="['/driver/pumps', row.pump.id]">
+                <span class="row-icon" [class.tieup]="row.pump.kind === 'TIE_UP'">
+                  <app-icon name="fuel" [size]="20" />
+                </span>
+                <span class="row-main">
+                  <span class="pump-name">{{ row.pump.name }}</span>
+                  <span class="pump-where">{{ pumpWhere(row.pump) }}</span>
+                </span>
+                <span class="row-meta">
+                  <span class="pump-distance">{{ formatDistance(row.km) }}</span>
+                  <span class="pump-time">{{ formatTravelTime(row.km) }}</span>
+                </span>
+              </a>
+            </li>
+          }
+        </ul>
+      }
+    }
+  </section>
+</div>

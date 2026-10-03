@@ -1,0 +1,132 @@
+<div class="page">
+  <app-page-header [title]="greeting()" [subtitle]="subtitle()" />
+
+  @if (dashboard.loading()) {
+    <p class="muted notice" role="status">Loading your home…</p>
+  } @else if (dashboard.error()) {
+    <div class="card notice">
+      <app-load-error [message]="dashboard.error()" (retry)="dashboard.load()" />
+    </div>
+  }
+
+  <div class="home">
+    <div class="column">
+      @if (dashboard.data(); as data) {
+        @if (data.vehicle && data.quota) {
+          <app-fuel-left-card class="o2" [quota]="data.quota" />
+        } @else {
+          <section class="card o1">
+            <app-empty-state
+              icon="car"
+              title="You are not linked to a vehicle yet."
+              text="Contact your MTO."
+            />
+          </section>
+        }
+
+        @if (data.open_request; as open) {
+          <app-pin-card
+            class="o3"
+            [pin]="open.pin"
+            [litres]="open.litres_requested"
+            [vehicle]="data.vehicle?.registration_number ?? ''"
+            [expiresAt]="open.expires_at"
+            (cancel)="cancelRequest(open.id)"
+            (expired)="dashboard.load(true)"
+          />
+        }
+
+        @if (data.duty_due.length) {
+          <section id="duty-card" class="card o5" aria-labelledby="duty-title">
+            <div class="card-head">
+              <span class="round"><app-icon name="file-text" [size]="22" /></span>
+              <h2 id="duty-title">Duty particulars due</h2>
+            </div>
+            <ul class="list">
+              @for (fill of data.duty_due; track fill.id) {
+                <li class="list-row duty-row">
+                  <span class="duty-what">
+                    <strong
+                      >{{ fill.registration_number }} · {{ litres(fill.litres_filled) }}</strong
+                    >
+                    <span class="muted">Filled {{ formatDateTime(fill.filled_at) }}</span>
+                  </span>
+                  <span class="duty-act">
+                    <span
+                      class="badge"
+                      [class.badge-danger]="fill.duty_overdue"
+                      [class.badge-warning]="!fill.duty_overdue"
+                    >
+                      {{ fill.duty_overdue ? 'Overdue' : 'Due' }}
+                    </span>
+                    <a
+                      class="btn btn-secondary btn-sm"
+                      routerLink="/driver/fuel"
+                      [queryParams]="{ duty: fill.id }"
+                      >Fill in</a
+                    >
+                  </span>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+      }
+    </div>
+
+    <div class="column">
+      @if (dashboard.data(); as data) {
+        @if (data.vehicle; as vehicle) {
+          <section id="vehicle-card" class="card vehicle o1" aria-label="Your vehicle">
+            <span class="round"><app-icon name="car" [size]="24" /></span>
+            <div class="who">
+              <div class="registration">{{ vehicle.registration_number }}</div>
+              <div class="muted">{{ vehicle.make }} {{ vehicle.model }}</div>
+            </div>
+            <span class="chip">{{ fuelLabel(vehicle.fuel_type) }}</span>
+          </section>
+        }
+      }
+
+      <div class="actions o4">
+        <a class="btn btn-primary btn-block" routerLink="/driver/pumps">
+          <app-icon name="compass" [size]="22" />
+          Find a pump
+        </a>
+        @if (dashboard.data(); as data) {
+          @if (data.vehicle && !data.open_request) {
+            <a class="btn btn-secondary btn-block" routerLink="/driver/fuel">
+              <app-icon name="fuel" [size]="20" />
+              Request fuel
+            </a>
+          }
+        }
+      </div>
+
+      @if (dashboard.data(); as data) {
+        @if (data.vehicle) {
+          <section id="odometer-card" class="card odometer o6" aria-labelledby="odometer-title">
+            <div class="card-head">
+              <span class="round"><app-icon name="gauge" [size]="22" /></span>
+              <div>
+                <h2 id="odometer-title">This week’s odometer</h2>
+                <p class="muted">Week of {{ formatDate(data.odometer.week_of) }}</p>
+              </div>
+            </div>
+            @if (data.odometer.recorded) {
+              <p class="recorded">
+                <app-icon name="check-circle" [size]="20" />
+                Recorded: {{ km(data.odometer.reading_km) }}
+              </p>
+            } @else {
+              <p class="muted">Enter the reading for the most recent Sunday.</p>
+              <a class="btn btn-primary btn-sm" routerLink="/driver/odometer"
+                >Enter Sunday reading</a
+              >
+            }
+          </section>
+        }
+      }
+    </div>
+  </div>
+</div>

@@ -1,0 +1,440 @@
+<ng-template #problem let-panel>
+  @if (panel.error()) {
+    <app-load-error [message]="panel.error()" (retry)="panel.load()" small />
+  } @else {
+    <p class="muted" role="status">Loading…</p>
+  }
+</ng-template>
+
+<div class="page">
+  @if (vehicle.loading()) {
+    <app-page-header title="Vehicle" backLink="/mto/vehicles" />
+    <p class="muted" role="status">Loading vehicle…</p>
+  } @else if (vehicle.error()) {
+    <app-page-header title="Vehicle" backLink="/mto/vehicles" />
+    <div class="card">
+      <app-load-error [message]="vehicle.error()" (retry)="loadAll()" small />
+    </div>
+  } @else if (vehicle.data(); as v) {
+    <app-page-header
+      [title]="v.registration_number"
+      [subtitle]="subtitle(v)"
+      backLink="/mto/vehicles"
+    >
+      <app-status-badge [status]="v.status" />
+      <button
+        type="button"
+        class="btn btn-secondary btn-sm"
+        aria-controls="vehicle-form"
+        [attr.aria-expanded]="editTarget() !== null"
+        (click)="openEdit(v)"
+      >
+        <app-icon name="pencil" [size]="16" />
+        Edit
+      </button>
+      @if (v.status === 'ACTIVE') {
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          [disabled]="busy()"
+          (click)="pause()"
+        >
+          <app-icon name="pause" [size]="16" />
+          Pause
+        </button>
+      } @else if (v.status === 'PAUSED') {
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          [disabled]="busy()"
+          (click)="resume()"
+        >
+          <app-icon name="play" [size]="16" />
+          Resume
+        </button>
+      }
+      @if (canChange(v)) {
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          aria-controls="termination"
+          [attr.aria-expanded]="terminationOpen()"
+          (click)="openTermination()"
+        >
+          Request termination
+        </button>
+      }
+    </app-page-header>
+
+    @if (v.status === 'TERMINATION_PENDING') {
+      <p class="muted notice">Waiting for the PTO to approve the termination of this vehicle.</p>
+    }
+
+    @if (editTarget(); as target) {
+      <div id="vehicle-form" class="form-slot">
+        <app-vehicle-form
+          [vehicle]="target"
+          (saved)="edited($event)"
+          (cancelled)="editTarget.set(null)"
+        />
+      </div>
+    }
+
+    @if (terminationOpen()) {
+      <section id="termination" class="card form-slot" aria-labelledby="termination-title">
+        <h2 id="termination-title">Request termination</h2>
+        <p class="muted">
+          The PTO decides. Until then the vehicle shows as waiting for approval: it cannot get fuel,
+          be paused or have anyone new linked to it.
+        </p>
+        <div class="field">
+          <label for="termination-note">Why should this vehicle be terminated?</label>
+          <textarea id="termination-note" rows="3" [formControl]="terminationNote"></textarea>
+        </div>
+        @if (terminationError()) {
+          <p class="error" role="alert">{{ terminationError() }}</p>
+        }
+        <div class="row-actions btn-group-sm">
+          <app-confirm-button label="Send for PTO approval" (confirmed)="requestTermination()" />
+          <button type="button" class="btn btn-ghost" (click)="closeTermination()">Cancel</button>
+        </div>
+      </section>
+    }
+
+    <div class="dashboard">
+      <section id="people" class="card" aria-labelledby="people-title">
+        <h2 id="people-title">People</h2>
+        <div class="tiles">
+          @for (slot of slots(); track slot.kind) {
+            <div class="person-tile" [attr.data-role]="slot.role">
+              <p class="kind">{{ slot.title }}</p>
+              @if (slot.person; as person) {
+                <p class="person-name">{{ person.full_name }}</p>
+                <p class="muted">Emp ID {{ person.emp_id || '—' }}</p>
+                @if (person.mobile) {
+                  <a class="call" [href]="'tel:' + person.mobile">{{ person.mobile }}</a>
+                }
+                <div class="row-actions btn-group-sm">
+                  <app-confirm-button label="End link" (confirmed)="endLink(person)" />
+                </div>
+              } @else if (!canChange(v)) {
+                <p class="muted">Not linked</p>
+              } @else if (slot.candidates.error() || slot.candidates.loading()) {
+                <ng-container
+                  [ngTemplateOutlet]="problem"
+                  [ngTemplateOutletContext]="{ $implicit: slot.candidates }"
+                />
+              } @else if (!slot.candidates.data()?.length) {
+                <p class="muted">{{ slot.none }}</p>
+              } @else {
+                <form class="link-form" (submit)="link($event, slot)">
+                  <div class="field">
+                    <label [for]="'link-' + slot.role">{{ slot.linkLabel }}</label>
+                    <select
+                      #choice
+                      [id]="'link-' + slot.role"
+                      (change)="choose(slot.kind, choice.value)"
+                    >
+                      <option value="" [selected]="chosen()[slot.kind] === null">
+                        {{ slot.prompt }}
+                      </option>
+                      @for (candidate of slot.candidates.data(); track candidate.id) {
+                        <option
+                          [value]="candidate.id"
+                          [selected]="chosen()[slot.kind] === candidate.id"
+                        >
+                          {{ candidate.full_name }} ({{ candidate.emp_id || '—' }})
+                        </option>
+                      }
+                    </select>
+                  </div>
+                  @if (linkError(); as failure) {
+                    @if (failure.kind === slot.kind) {
+                      <p class="error" role="alert">{{ failure.message }}</p>
+                    }
+                  }
+                  <button
+                    type="submit"
+                    class="btn btn-primary btn-sm"
+                    [disabled]="busy() || chosen()[slot.kind] === null"
+                  >
+                    Link
+                  </button>
+                </form>
+              }
+            </div>
+          }
+        </div>
+      </section>
+
+      <section id="fuel" class="card" aria-labelledby="fuel-title">
+        <div class="card-head">
+          <h2 id="fuel-title">Fuel this month</h2>
+          @if (quota.data(); as month) {
+            <span class="muted">{{ monthLabel(month.month) }}</span>
+          }
+        </div>
+        @if (!quota.error() && quota.data(); as q) {
+          <div class="stats">
+            @for (stat of fuelStats(); track stat.label) {
+              <div class="stat" [class.stat-danger]="stat.negative">
+                <span class="stat-icon"><app-icon [name]="stat.icon" [size]="20" /></span>
+                <div>
+                  <div class="stat-label">{{ stat.label }}</div>
+                  <div class="stat-value" [class.negative]="stat.negative">
+                    {{ litres(stat.value) }}
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+          <div
+            class="progress"
+            role="progressbar"
+            aria-label="Fuel used this month"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            [attr.aria-valuenow]="fuelPercent().toFixed(0)"
+            [class.warning]="fuelPercent() >= 80 && fuelPercent() < 100"
+            [class.danger]="fuelPercent() >= 100"
+          >
+            <span [style.width.%]="fuelBar()"></span>
+          </div>
+          @if (+q.additional_litres > 0) {
+            <p class="muted">
+              {{ litres(q.base_litres) }} monthly + {{ litres(q.additional_litres) }} additional
+            </p>
+          }
+        } @else {
+          <ng-container
+            [ngTemplateOutlet]="problem"
+            [ngTemplateOutletContext]="{ $implicit: quota }"
+          />
+        }
+        <div>
+          <a
+            class="btn btn-secondary btn-sm"
+            routerLink="/mto/additional-quota"
+            [queryParams]="{ vehicle: v.id }"
+          >
+            Add additional quota
+          </a>
+        </div>
+      </section>
+
+      <section id="odometer" class="card" aria-labelledby="odometer-title">
+        <h2 id="odometer-title">Odometer</h2>
+        @if (!readings.error() && readings.data(); as all) {
+          @if (!all.length) {
+            <p class="muted">No readings yet. The driver enters one every Sunday.</p>
+          } @else {
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Week of</th>
+                    <th scope="col">Reading</th>
+                    <th scope="col">Since previous</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (reading of latestReadings(); track reading.id) {
+                    <tr>
+                      <td>{{ formatDate(reading.week_of) }}</td>
+                      <td>{{ km(reading.reading_km) }}</td>
+                      <td>{{ km(reading.km_since_previous) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            @if (all.length > readingsShown) {
+              <p class="muted">
+                Showing the latest {{ readingsShown }} of {{ all.length }} readings.
+              </p>
+            }
+          }
+        } @else {
+          <ng-container
+            [ngTemplateOutlet]="problem"
+            [ngTemplateOutletContext]="{ $implicit: readings }"
+          />
+        }
+      </section>
+
+      <section id="service" class="card" aria-labelledby="service-title">
+        <h2 id="service-title">Service</h2>
+        @if (!service.error() && service.data(); as status) {
+          <div class="service-status">
+            @let badge = serviceBadge(status);
+            <span [class]="'badge badge-' + badge.tone">{{ badge.label }}</span>
+          </div>
+          <dl class="facts">
+            <div>
+              <dt>{{ records.data()?.length === 0 ? 'Counting from' : 'Last service' }}</dt>
+              <dd>
+                {{ formatDate(status.last_service_date) }} at {{ km(status.last_service_km) }}
+              </dd>
+            </div>
+            @if (nextDue(status)) {
+              <div>
+                <dt>Next due</dt>
+                <dd>{{ nextDue(status) }}</dd>
+              </div>
+            }
+            <div>
+              <dt>Since then</dt>
+              <dd>{{ km(status.km_since) }}, {{ status.days_since }} days</dd>
+            </div>
+          </dl>
+        } @else {
+          <ng-container
+            [ngTemplateOutlet]="problem"
+            [ngTemplateOutletContext]="{ $implicit: service }"
+          />
+        }
+
+        <form class="service-form" (submit)="addService($event)">
+          <h3>Add service record</h3>
+          <div class="form-grid">
+            <div class="field">
+              <label for="service-date">Date</label>
+              <input
+                id="service-date"
+                type="date"
+                [formControl]="serviceForm.controls.service_date"
+              />
+            </div>
+            <div class="field">
+              <label for="service-km">Odometer (km)</label>
+              <input
+                id="service-km"
+                type="number"
+                inputmode="numeric"
+                [formControl]="serviceForm.controls.odometer_km"
+              />
+            </div>
+            <div class="field full">
+              <label for="service-notes">Notes</label>
+              <textarea
+                id="service-notes"
+                rows="2"
+                [formControl]="serviceForm.controls.notes"
+              ></textarea>
+            </div>
+          </div>
+          @if (serviceError()) {
+            <p class="error" role="alert">{{ serviceError() }}</p>
+          }
+          <button type="submit" class="btn btn-primary btn-sm" [disabled]="busy()">
+            Save record
+          </button>
+        </form>
+
+        @if (!records.error() && records.data(); as all) {
+          @if (!all.length) {
+            <p class="muted">No services recorded yet.</p>
+          } @else {
+            <ul class="list records">
+              @for (record of all; track record.id) {
+                <li class="list-row record">
+                  <strong>{{ formatDate(record.service_date) }}</strong>
+                  <span>{{ km(record.odometer_km) }}</span>
+                  <span class="muted">{{ record.recorded_by_name }}</span>
+                  @if (record.notes) {
+                    <span class="record-notes">{{ record.notes }}</span>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        } @else {
+          <ng-container
+            [ngTemplateOutlet]="problem"
+            [ngTemplateOutletContext]="{ $implicit: records }"
+          />
+        }
+      </section>
+    </div>
+
+    <section id="history" class="card" aria-labelledby="history-title">
+      <div class="history-head">
+        <h2 id="history-title">Link history</h2>
+        <app-download-button [url]="historyExport()" small />
+      </div>
+      @if (!links.error() && links.data()) {
+        <div class="chips history-tabs" role="tablist" aria-label="Link history">
+          @for (tab of historyTabs; track tab.kind) {
+            <button
+              type="button"
+              role="tab"
+              class="chip"
+              [id]="'history-tab-' + tab.kind"
+              [class.active]="historyKind() === tab.kind"
+              [attr.aria-selected]="historyKind() === tab.kind"
+              aria-controls="history-panel"
+              (click)="showHistory(tab.kind)"
+            >
+              {{ tab.label }} <span class="count">{{ linksOf(tab.kind).length }}</span>
+            </button>
+          }
+        </div>
+        <div
+          id="history-panel"
+          role="tabpanel"
+          [attr.aria-labelledby]="'history-tab-' + historyKind()"
+        >
+          @if (!historyRows().length) {
+            <p class="muted">No {{ historyNoun() }} has been linked yet.</p>
+          } @else {
+            <ul class="list">
+              @for (link of historyRows(); track link.id) {
+                <li class="list-row history-row">
+                  <div>
+                    <strong>{{ link.person_name }}</strong>
+                    <p class="muted">{{ link.person_emp_id || '—' }}</p>
+                  </div>
+                  <div class="when">
+                    @if (link.ended_at) {
+                      <span
+                        >{{ formatDate(link.started_at) }} to {{ formatDate(link.ended_at) }}</span
+                      >
+                      @if (link.ended_by_name) {
+                        <span class="muted">Ended by {{ link.ended_by_name }}</span>
+                      }
+                    } @else {
+                      <span>Since {{ formatDate(link.started_at) }}</span>
+                      <span class="badge badge-success">Current</span>
+                    }
+                  </div>
+                </li>
+              }
+            </ul>
+            @if (hiddenLinks() > 0) {
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm more"
+                (click)="historyAll.set(true)"
+              >
+                Show {{ hiddenLinks() }} more
+              </button>
+            } @else if (historyAll() && linksOf(historyKind()).length > historyFirst) {
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm more"
+                (click)="historyAll.set(false)"
+              >
+                Show fewer
+              </button>
+            }
+          }
+        </div>
+      } @else {
+        <ng-container
+          [ngTemplateOutlet]="problem"
+          [ngTemplateOutletContext]="{ $implicit: links }"
+        />
+      }
+    </section>
+  }
+</div>

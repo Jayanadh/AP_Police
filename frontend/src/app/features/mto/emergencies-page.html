@@ -1,0 +1,88 @@
+<div class="page">
+  <app-page-header
+    title="Emergencies"
+    subtitle="Fills that went beyond a vehicle's monthly quota. Allowing one counts it against the vehicle's additional quota."
+  />
+
+  <div class="chips" role="group" aria-label="Filter by decision">
+    @for (option of tabs; track option.value) {
+      <button
+        type="button"
+        class="chip"
+        [class.active]="tab() === option.value"
+        [attr.aria-pressed]="tab() === option.value"
+        (click)="choose(option.value)"
+      >
+        {{ option.label }}
+      </button>
+    }
+  </div>
+
+  @if (fills.loading()) {
+    <p class="muted" role="status">Loading emergency fills…</p>
+  } @else if (fills.error()) {
+    <div class="card">
+      <app-load-error [message]="fills.error()" (retry)="fills.load()" />
+    </div>
+  } @else if (!fills.data()?.length) {
+    <div class="card">
+      <app-empty-state
+        icon="alert-triangle"
+        [title]="
+          tab() === 'pending' ? 'No emergency fills waiting.' : 'No allowed emergency fills yet.'
+        "
+        [text]="
+          tab() === 'pending'
+            ? 'When a driver fills beyond the quota, it shows up here for you to allow.'
+            : 'Fills you allow are listed here.'
+        "
+      />
+    </div>
+  } @else {
+    <ul class="emergencies">
+      @for (fill of fills.data(); track fill.id) {
+        <li class="card emergency">
+          <div class="top">
+            <span class="registration">{{ fill.registration_number }}</span>
+            <span class="badges">
+              <span class="badge badge-danger">{{ litres(fill.emergency_litres) }} emergency</span>
+              <app-status-badge [status]="fill.emergency_status" />
+            </span>
+          </div>
+          <dl class="rows">
+            <div>
+              <dt>Driver</dt>
+              <dd>{{ fill.driver_name }}</dd>
+            </div>
+            <div>
+              <dt>Pump</dt>
+              <dd>{{ fill.pump_name || '—' }}</dd>
+            </div>
+            <div>
+              <dt>Filled</dt>
+              <dd>{{ formatDateTime(fill.filled_at) }}</dd>
+            </div>
+            <div>
+              <dt>Litres filled</dt>
+              <dd>{{ litres(fill.litres_filled) }}</dd>
+            </div>
+            <div>
+              <dt>Reason</dt>
+              <dd>{{ fill.emergency_reason || '—' }}</dd>
+            </div>
+          </dl>
+          @if (fill.emergency_status === 'PENDING') {
+            <button
+              type="button"
+              class="btn btn-primary allow"
+              [disabled]="busyId() === fill.id"
+              (click)="allow(fill)"
+            >
+              Allow (count against additional quota)
+            </button>
+          }
+        </li>
+      }
+    </ul>
+  }
+</div>

@@ -1,0 +1,260 @@
+<div class="page">
+  <app-page-header title="Fuel statement" [subtitle]="subtitle()" />
+
+  <section class="card controls" aria-label="Period of the statement">
+    <app-period-picker [period]="period()" (periodChange)="choosePeriod($event)" />
+    @if (isPto()) {
+      <app-office-select
+        class="office"
+        inputId="statement-unit"
+        (officeChange)="chooseUnit($event)"
+      />
+    }
+    <app-download-button [url]="exportUrl" [params]="downloadParams()" />
+  </section>
+
+  <section id="summary" aria-label="Totals">
+    @if (summary.loading()) {
+      <p class="muted" role="status">Loading the statement…</p>
+    } @else if (summary.error()) {
+      <div class="card">
+        <app-load-error [message]="summary.error()" (retry)="summary.load()" />
+      </div>
+    } @else if (summary.data(); as data) {
+      <div class="totals">
+        <app-stat-card
+          icon="fuel"
+          label="Litres filled"
+          tone="primary"
+          [value]="litres(data.litres)"
+        />
+        <app-stat-card icon="droplet" label="Fills" [value]="data.fills" />
+        <app-stat-card icon="droplet" label="Petrol" [value]="litres(data.petrol_litres)" />
+        <app-stat-card icon="droplet" label="Diesel" [value]="litres(data.diesel_litres)" />
+        <app-stat-card
+          icon="alert-triangle"
+          label="Emergency"
+          [tone]="tone(data.emergency_litres)"
+          [value]="litres(data.emergency_litres)"
+        />
+      </div>
+
+      @if (data.by_unit) {
+        <section id="by-unit" class="card" aria-labelledby="by-unit-title">
+          <h2 id="by-unit-title">By office</h2>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th scope="col">Office</th>
+                  <th scope="col">Fills</th>
+                  <th scope="col">Petrol</th>
+                  <th scope="col">Diesel</th>
+                  <th scope="col">Total</th>
+                  <th scope="col">Emergency</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of data.by_unit; track row.unit) {
+                  <tr>
+                    <th scope="row">{{ row.unit_name }}</th>
+                    <td>{{ row.fills }}</td>
+                    <td>{{ orDash(row.petrol_litres) }}</td>
+                    <td>{{ orDash(row.diesel_litres) }}</td>
+                    <td>{{ litres(row.litres) }}</td>
+                    <td>{{ orDash(row.emergency_litres) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+
+      @if (isPto() && !data.by_vehicle) {
+        <p class="muted pick-office">Pick an office to see its vehicles and fills.</p>
+      }
+
+      <div class="breakdowns">
+        @if (data.by_vehicle?.length) {
+          <section id="by-vehicle" class="card" aria-labelledby="by-vehicle-title">
+            <h2 id="by-vehicle-title">By vehicle</h2>
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Vehicle</th>
+                    @if (atPump()) {
+                      <th scope="col">Office</th>
+                    }
+                    <th scope="col">Fuel</th>
+                    <th scope="col">Fills</th>
+                    <th scope="col">Litres</th>
+                    <th scope="col">Emergency</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of data.by_vehicle; track row.vehicle) {
+                    <tr>
+                      <th scope="row">{{ row.registration_number }}</th>
+                      @if (atPump()) {
+                        <td>{{ row.unit_name }}</td>
+                      }
+                      <td>{{ fuelLabel(row.fuel_type) }}</td>
+                      <td>{{ row.fills }}</td>
+                      <td>{{ litres(row.litres) }}</td>
+                      <td>{{ orDash(row.emergency_litres) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </section>
+        }
+
+        @if (data.by_pump?.length) {
+          <section id="by-pump" class="card" aria-labelledby="by-pump-title">
+            <h2 id="by-pump-title">By pump</h2>
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Pump</th>
+                    <th scope="col">Kind</th>
+                    <th scope="col">Fills</th>
+                    <th scope="col">Litres</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of data.by_pump; track row.pump) {
+                    <tr>
+                      <th scope="row">{{ row.pump_name }}</th>
+                      <td>{{ pumpKindLabel(row.pump_kind) }}</td>
+                      <td>{{ row.fills }}</td>
+                      <td>{{ litres(row.litres) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </section>
+        }
+      </div>
+
+      @if (data.stock) {
+        <section id="stock" class="card" aria-labelledby="stock-title">
+          <h2 id="stock-title">Stock</h2>
+          <p class="muted">
+            Opening stock, plus tanker receipts, minus fills, plus what morning measurements
+            corrected.
+          </p>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th scope="col">Fuel</th>
+                  <th scope="col">Opening</th>
+                  <th scope="col">Received</th>
+                  <th scope="col">Filled</th>
+                  <th scope="col">Measured change</th>
+                  <th scope="col">Closing</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of data.stock; track row.fuel_type) {
+                  <tr>
+                    <th scope="row">{{ fuelLabel(row.fuel_type) }}</th>
+                    <td>{{ litres(row.opening_litres) }}</td>
+                    <td>{{ signed(row.received_litres) }}</td>
+                    <td>{{ signed(row.dispensed_litres, -1) }}</td>
+                    <td>{{ signed(row.measured_change_litres) }}</td>
+                    <td>{{ litres(row.closing_litres) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+    }
+  </section>
+
+  @if (showFills()) {
+    <section id="fills" aria-labelledby="fills-title">
+      <div class="fills-head">
+        <h2 id="fills-title">Fills</h2>
+        @if (isMto()) {
+          <div class="field vehicle-filter">
+            <label for="statement-vehicle">Fills of</label>
+            <select
+              #vehicleSelect
+              id="statement-vehicle"
+              (change)="chooseVehicle(vehicleSelect.value)"
+            >
+              <option value="">All vehicles</option>
+              @for (vehicle of vehicles.data(); track vehicle.id) {
+                <option [value]="vehicle.id">{{ vehicle.registration_number }}</option>
+              }
+            </select>
+          </div>
+        }
+      </div>
+
+      @if (fills.loading()) {
+        <p class="muted" role="status">Loading fills…</p>
+      } @else if (fills.error()) {
+        <div class="card">
+          <app-load-error [message]="fills.error()" (retry)="fills.load()" />
+        </div>
+      } @else if (!fills.data()?.length) {
+        <div class="card">
+          <app-empty-state
+            icon="fuel"
+            title="No fills in this period."
+            text="Fills show up here once a vehicle fills at a pump."
+          />
+        </div>
+      } @else {
+        @if (overdueText() && !atPump()) {
+          <p class="overdue-note">{{ overdueText() }}</p>
+        }
+        <ul class="fills">
+          @for (fill of fills.data(); track fill.id) {
+            <li class="card fill">
+              <div class="top">
+                <div>
+                  <span class="registration">{{ fill.registration_number }}</span>
+                  <span class="muted">{{ fill.driver_name }}</span>
+                </div>
+                <span class="amount">{{ litres(fill.litres_filled) }}</span>
+              </div>
+              <p class="meta muted">
+                <span>{{ fill.pump_name || '—' }}</span>
+                <span>{{ formatDateTime(fill.filled_at) }}</span>
+              </p>
+              @if (isEmergency(fill)) {
+                <div>
+                  <span class="badge badge-danger emergency-badge">
+                    Emergency {{ litres(fill.emergency_litres) }}
+                  </span>
+                </div>
+              }
+              @if (!atPump()) {
+                <div class="duty">
+                  <span class="duty-label">Duty particulars</span>
+                  @if (hasDuty(fill)) {
+                    {{ fill.duty_particulars }}
+                  } @else if (fill.duty_overdue) {
+                    <span class="badge badge-danger duty-badge">Overdue</span>
+                  } @else {
+                    <span class="badge badge-warning duty-badge">Due</span>
+                  }
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+</div>

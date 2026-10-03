@@ -1,0 +1,135 @@
+<div class="page">
+  <app-page-header
+    title="Approvals"
+    subtitle="New officers and vehicle terminations that MTO offices have asked for."
+  />
+
+  <div class="chips" role="group" aria-label="Filter by status">
+    @for (filter of filters; track filter.value) {
+      <button
+        type="button"
+        class="chip"
+        [class.active]="status() === filter.value"
+        [attr.aria-pressed]="status() === filter.value"
+        (click)="choose(filter.value)"
+      >
+        {{ filter.label }}
+      </button>
+    }
+  </div>
+
+  @if (loading()) {
+    <p class="muted" role="status">Loading requests…</p>
+  } @else if (loadError()) {
+    <div class="card">
+      <app-load-error [message]="loadError()" (retry)="load()" />
+    </div>
+  } @else if (!requests().length) {
+    <div class="card">
+      <app-empty-state
+        icon="check-circle"
+        [title]="emptyTitle()"
+        text="Requests from MTO offices show up here."
+      />
+    </div>
+  } @else {
+    <div class="requests">
+      @for (request of requests(); track request.id) {
+        <article class="card request">
+          <div class="request-head">
+            <span class="badge badge-info">{{ request.kind_label }}</span>
+            @if (request.status !== 'PENDING') {
+              <app-status-badge [status]="request.status" />
+            }
+            <time class="muted" [attr.datetime]="request.requested_at">{{
+              when(request.requested_at)
+            }}</time>
+          </div>
+
+          <h2>{{ request.unit_name }}</h2>
+
+          @if (request.officer; as officer) {
+            <div class="subject">
+              <span class="subject-icon"><app-icon name="shield" [size]="20" /></span>
+              <div>
+                <strong>{{ officer.full_name }}</strong>
+                <p class="muted">
+                  Emp ID {{ officer.emp_id }} · {{ officer.designation_name || 'No designation' }} ·
+                  {{ officer.mobile || 'No mobile' }}
+                </p>
+              </div>
+            </div>
+          }
+          @if (request.vehicle; as vehicle) {
+            <div class="subject">
+              <span class="subject-icon"><app-icon name="car" [size]="20" /></span>
+              <div>
+                <strong>{{ vehicle.registration_number }}</strong>
+                <p class="muted">{{ vehicle.make }} {{ vehicle.model }}</p>
+              </div>
+            </div>
+          }
+
+          @if (request.request_note) {
+            <div class="note">
+              <p class="muted small">MTO's note</p>
+              <p>{{ request.request_note }}</p>
+            </div>
+          }
+          <p class="muted small">Requested by {{ request.requested_by_name }}</p>
+
+          @if (request.status === 'PENDING') {
+            <div class="decide">
+              <div class="field">
+                <label [for]="'note-' + request.id">Note</label>
+                <input
+                  #note
+                  type="text"
+                  autocomplete="off"
+                  [attr.aria-describedby]="'note-hint-' + request.id"
+                  [id]="'note-' + request.id"
+                  [value]="notes()[request.id] ?? ''"
+                  (input)="setNote(request.id, note.value)"
+                />
+                <p class="muted small" [id]="'note-hint-' + request.id">
+                  Needed to reject, optional to approve.
+                </p>
+              </div>
+              @if (errors()[request.id]) {
+                <p class="error" role="alert">{{ errors()[request.id] }}</p>
+              }
+              <div class="decide-actions">
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  [disabled]="busyId() === request.id"
+                  (click)="approve(request)"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-danger"
+                  [disabled]="busyId() === request.id"
+                  (click)="reject(request)"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          } @else {
+            <div class="note">
+              @if (request.decision_note) {
+                <p class="muted small">Decision note</p>
+                <p>{{ request.decision_note }}</p>
+              }
+              <p class="muted small">
+                Decided by {{ request.decided_by_name }} · {{ when(request.decided_at) }}
+              </p>
+            </div>
+          }
+        </article>
+      }
+    </div>
+  }
+</div>

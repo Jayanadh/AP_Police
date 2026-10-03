@@ -1,0 +1,90 @@
+<section class="card">
+  <h2>{{ title() }}</h2>
+
+  <form class="add" [formGroup]="form" (ngSubmit)="add()">
+    <div class="field">
+      <label [for]="'master-add-' + kind()">New {{ noun() }}</label>
+      <input
+        class="add-input"
+        type="text"
+        autocomplete="off"
+        [id]="'master-add-' + kind()"
+        formControlName="name"
+      />
+    </div>
+    <button type="submit" class="btn btn-primary" [disabled]="adding()">
+      <app-icon name="plus" [size]="18" />
+      Add
+    </button>
+  </form>
+
+  @if (error()) {
+    <p class="error" role="alert">{{ error() }}</p>
+  }
+
+  @if (loading()) {
+    <p class="muted" role="status">Loading…</p>
+  } @else if (loadError()) {
+    <app-load-error [message]="loadError()" (retry)="load()" />
+  } @else if (!items().length) {
+    <p class="muted empty">No {{ title().toLowerCase() }} yet.</p>
+  } @else {
+    <ul class="list">
+      @for (item of items(); track item.id) {
+        <li class="list-row master-row">
+          @if (editingId() === item.id) {
+            <form class="rename" (submit)="$event.preventDefault(); rename(item)">
+              <div class="field rename-field">
+                <label class="sr-only" [for]="editId(item)">New name for {{ item.name }}</label>
+                <input
+                  type="text"
+                  autocomplete="off"
+                  [id]="editId(item)"
+                  [value]="draft()"
+                  (input)="draft.set($any($event.target).value)"
+                />
+              </div>
+              <button
+                type="submit"
+                class="btn btn-primary btn-sm"
+                [disabled]="busyId() === item.id"
+              >
+                Save
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" (click)="cancelEdit()">
+                Cancel
+              </button>
+            </form>
+          } @else {
+            <span class="master-name" [class.off]="!item.is_active" [id]="nameId(item)">{{
+              item.name
+            }}</span>
+            <span class="row-actions">
+              <button
+                type="button"
+                class="btn-icon edit"
+                [attr.aria-label]="'Edit ' + item.name"
+                (click)="startEdit(item)"
+              >
+                <app-icon name="pencil" [size]="16" />
+              </button>
+              <button
+                type="button"
+                role="switch"
+                class="chip toggle"
+                [class.active]="item.is_active"
+                [id]="switchId(item)"
+                [attr.aria-checked]="item.is_active"
+                [attr.aria-labelledby]="nameId(item) + ' ' + switchId(item)"
+                [disabled]="busyId() === item.id"
+                (click)="toggle(item)"
+              >
+                {{ item.is_active ? 'Active' : 'Inactive' }}
+              </button>
+            </span>
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

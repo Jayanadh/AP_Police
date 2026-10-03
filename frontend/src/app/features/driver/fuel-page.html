@@ -1,0 +1,250 @@
+<div class="page">
+  <app-page-header
+    title="Fuel"
+    subtitle="Pick a police pump or tie-up bunk anywhere in AP, get a PIN, and show it there."
+  />
+
+  <div class="layout">
+    <div class="side">
+      @if (vehicles.loading()) {
+        <p class="muted" role="status">Loading your vehicle…</p>
+      } @else if (vehicles.error()) {
+        <div class="card">
+          <app-load-error [message]="vehicles.error()" (retry)="vehicles.load()" />
+        </div>
+      } @else if (!vehicle()) {
+        <section class="card">
+          <app-empty-state
+            icon="car"
+            title="You are not linked to a vehicle yet."
+            text="Contact your MTO."
+          />
+        </section>
+      } @else {
+        @if (quota.loading()) {
+          <p class="muted" role="status">Loading this month’s fuel…</p>
+        } @else if (quota.error()) {
+          <div class="card">
+            <app-load-error [message]="quota.error()" (retry)="quota.load()" />
+          </div>
+        } @else if (quota.data(); as q) {
+          <app-fuel-left-card [quota]="q" />
+        }
+
+        @if (requests.data()) {
+          @if (open(); as request) {
+            <app-pin-card
+              [pin]="request.pin!"
+              [litres]="request.litres_requested"
+              [vehicle]="request.registration_number"
+              [pump]="request.pump_name ?? ''"
+              [expiresAt]="request.expires_at"
+              (cancel)="cancel(request)"
+              (expired)="requests.load(true)"
+            />
+          } @else if (quota.data()) {
+            <section class="card card-hero" aria-labelledby="request-title">
+              <form id="request-form" novalidate [formGroup]="form" (ngSubmit)="submit()">
+                <h2 id="request-title">Request fuel</h2>
+
+                <div class="field">
+                  <label for="fuel-pump">Pump</label>
+                  <select id="fuel-pump" formControlName="pump">
+                    <option value="">Pick the pump you will fill at</option>
+                    @if (policePumps().length) {
+                      <optgroup label="Police pumps">
+                        @for (pump of policePumps(); track pump.id) {
+                          <option [value]="pump.id" [disabled]="!available(pump)">
+                            {{ pumpOption(pump) }}
+                          </option>
+                        }
+                      </optgroup>
+                    }
+                    @if (tieUps().length) {
+                      <optgroup label="Tie-up bunks">
+                        @for (pump of tieUps(); track pump.id) {
+                          <option [value]="pump.id" [disabled]="!available(pump)">
+                            {{ pumpOption(pump) }}
+                          </option>
+                        }
+                      </optgroup>
+                    }
+                  </select>
+                </div>
+                @if (directory.error()) {
+                  <app-load-error [message]="directory.error()" (retry)="directory.load()" small />
+                }
+                <a class="find-link" routerLink="/driver/pumps">Find a pump on the map</a>
+
+                <div class="field litres-box">
+                  <label for="fuel-litres">Litres</label>
+                  <input
+                    id="fuel-litres"
+                    type="number"
+                    inputmode="decimal"
+                    min="0"
+                    step="0.01"
+                    formControlName="litres"
+                  />
+                  <span aria-hidden="true">L</span>
+                </div>
+
+                <div class="litre-chips" role="group" aria-label="Quick amounts">
+                  @for (amount of quickLitres; track amount) {
+                    <button
+                      type="button"
+                      class="chip"
+                      [class.active]="litresValue() === amount"
+                      [attr.aria-pressed]="litresValue() === amount"
+                      (click)="setLitres(amount)"
+                    >
+                      {{ amount }} L
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    class="chip"
+                    [class.active]="fullTank() > 0 && litresValue() === fullTank()"
+                    [attr.aria-pressed]="fullTank() > 0 && litresValue() === fullTank()"
+                    [disabled]="fullTank() <= 0"
+                    (click)="setLitres(fullTank())"
+                  >
+                    Full tank
+                    @if (fullTank() > 0) {
+                      ({{ litres(fullTank()) }})
+                    }
+                  </button>
+                </div>
+
+                @if (over()) {
+                  <div id="emergency" class="emergency">
+                    <p class="emergency-head">
+                      <app-icon name="alert-triangle" [size]="18" />
+                      <strong>Emergency</strong>
+                    </p>
+                    <p>
+                      @if (normalLeft() > 0) {
+                        That is more than the {{ litres(normalLeft()) }} left this month.
+                      } @else {
+                        Nothing is left this month.
+                      }
+                      @if (emergencyLeft() > 0) {
+                        Up to {{ litres(emergencyLeft()) }} extra this month, with a reason. Your
+                        MTO is told.
+                      } @else {
+                        No emergency litres are left this month.
+                      }
+                    </p>
+                    <div class="field-inline">
+                      <input id="fuel-emergency" type="checkbox" formControlName="is_emergency" />
+                      <label for="fuel-emergency">This is an emergency</label>
+                    </div>
+                    <div class="field">
+                      <label for="fuel-reason">Reason for the emergency</label>
+                      <textarea
+                        id="fuel-reason"
+                        rows="3"
+                        formControlName="emergency_reason"
+                        placeholder="What the duty is and why it cannot wait"
+                      ></textarea>
+                    </div>
+                  </div>
+                }
+
+                @if (formError()) {
+                  <p class="error form-error" role="alert">{{ formError() }}</p>
+                }
+
+                <button
+                  type="submit"
+                  class="btn btn-primary btn-block get-pin"
+                  [disabled]="saving()"
+                >
+                  <app-icon name="lock" [size]="20" />
+                  Get PIN
+                </button>
+              </form>
+            </section>
+          }
+        }
+      }
+    </div>
+
+    <section id="requests-card" class="card" aria-labelledby="requests-title">
+      <h2 id="requests-title">My requests</h2>
+      @if (requests.loading()) {
+        <p class="muted" role="status">Loading your requests…</p>
+      } @else if (requests.error()) {
+        <app-load-error [message]="requests.error()" (retry)="requests.load()" small />
+      } @else if (!requests.data()?.length) {
+        <app-empty-state icon="fuel" title="No requests yet." text="Your PIN requests show here." />
+      } @else {
+        <ul class="list">
+          @for (request of requests.data(); track request.id) {
+            <li
+              class="request"
+              [id]="'request-' + request.id"
+              [class.highlight]="highlightId() === request.id"
+            >
+              <div class="top">
+                <span class="badges">
+                  <app-status-badge [status]="request.status" [label]="request.status_label" />
+                  @if (request.is_emergency) {
+                    <span class="badge badge-danger">Emergency</span>
+                  }
+                </span>
+                <span class="amount">{{
+                  litres(request.litres_filled ?? request.litres_requested)
+                }}</span>
+              </div>
+              <p class="muted">
+                {{ request.registration_number }}
+                @if (request.pump_name) {
+                  · {{ request.pump_name }}
+                }
+              </p>
+              <p class="muted">{{ when(request) }}</p>
+
+              @if (owesDuty(request)) {
+                <div class="field duty">
+                  <div class="top">
+                    <label [for]="'duty-' + request.id">Duty particulars</label>
+                    <span
+                      class="badge duty-badge"
+                      [class.badge-danger]="request.duty_overdue"
+                      [class.badge-warning]="!request.duty_overdue"
+                      >{{ request.duty_overdue ? 'Overdue' : 'Due' }}</span
+                    >
+                  </div>
+                  <textarea
+                    [id]="'duty-' + request.id"
+                    rows="3"
+                    placeholder="Where the vehicle went and on what duty"
+                    [value]="drafts()[request.id] ?? ''"
+                    (input)="draft(request.id, $event)"
+                  ></textarea>
+                  <p class="muted">Due by {{ formatDateTime(request.duty_due_at) }}</p>
+                  @if (dutyErrors()[request.id]) {
+                    <p class="field-error" role="alert">{{ dutyErrors()[request.id] }}</p>
+                  }
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-sm"
+                    [disabled]="dutyBusy() === request.id"
+                    (click)="submitDuty(request)"
+                  >
+                    Submit
+                  </button>
+                </div>
+              } @else if (request.duty_particulars) {
+                <p class="muted">
+                  Duty: <span class="duty-text">{{ request.duty_particulars }}</span>
+                </p>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  </div>
+</div>

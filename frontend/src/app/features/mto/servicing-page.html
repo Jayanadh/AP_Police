@@ -1,0 +1,50 @@
+<div class="page">
+  <app-page-header
+    title="Servicing"
+    subtitle="Vehicles that have passed their service interval in km or days."
+  />
+
+  @if (due.loading()) {
+    <p class="muted" role="status">Loading vehicles due…</p>
+  } @else if (due.error()) {
+    <div class="card">
+      <app-load-error [message]="due.error()" (retry)="due.load()" />
+    </div>
+  } @else if (!due.data()?.length) {
+    <div class="card">
+      <app-empty-state
+        icon="wrench"
+        title="No vehicles are due for a service."
+        text="A vehicle shows up here once it passes its service interval."
+      />
+    </div>
+  } @else {
+    <ul class="dues">
+      @for (row of due.data(); track row.vehicle) {
+        <li class="card due">
+          <a class="registration" [routerLink]="['/mto/vehicles', row.vehicle]">{{
+            row.registration_number
+          }}</a>
+          <dl class="facts">
+            <div>
+              <dt>Last service</dt>
+              <dd>{{ formatDate(row.last_service_date) }} at {{ km(row.last_service_km) }}</dd>
+            </div>
+            <div>
+              <dt>Km since</dt>
+              <dd>{{ km(row.km_since) }}</dd>
+            </div>
+            <div>
+              <dt>Days since</dt>
+              <dd>{{ row.days_since }} days</dd>
+            </div>
+            <div>
+              <dt>Next due</dt>
+              <dd>{{ nextDue(row) || '—' }}</dd>
+            </div>
+          </dl>
+        </li>
+      }
+    </ul>
+  }
+</div>

@@ -1,0 +1,151 @@
+<div class="page">
+  <app-page-header
+    title="Transfers"
+    subtitle="Ask another office for an officer, and decide on requests for your own officers."
+  />
+
+  <section class="card request-card">
+    <h2>Request an officer from another office</h2>
+    <p class="muted">Type the officer's Emp ID. Their current office decides whether they move.</p>
+
+    <div class="lookup">
+      <form class="lookup-form" (submit)="find($event)">
+        <div class="field">
+          <label for="officer-emp">Emp ID</label>
+          <input
+            id="officer-emp"
+            type="text"
+            autocomplete="off"
+            autocapitalize="characters"
+            [formControl]="empId"
+            (input)="forget()"
+          />
+        </div>
+        <button type="submit" class="btn btn-secondary" [disabled]="finding()">Find</button>
+      </form>
+      @if (lookupError()) {
+        <p class="error" role="alert">{{ lookupError() }}</p>
+      }
+    </div>
+
+    @if (officer(); as found) {
+      <div id="officer-card" class="officer-card">
+        <span class="avatar"><app-icon name="shield" [size]="22" /></span>
+        <div>
+          <strong>{{ found.full_name }}</strong>
+          <p class="muted">Emp ID {{ found.emp_id }}</p>
+          <p class="muted">{{ found.designation_name || 'No designation' }}</p>
+          <p class="muted">Now in {{ found.unit_name }}</p>
+        </div>
+      </div>
+
+      <form class="request-form" (submit)="send($event, found)">
+        <div class="field">
+          <label for="transfer-note">Note</label>
+          <textarea id="transfer-note" rows="3" [formControl]="note"></textarea>
+        </div>
+        @if (sendError()) {
+          <p class="error" role="alert">{{ sendError() }}</p>
+        }
+        <button type="submit" class="btn btn-primary" [disabled]="sending()">Send request</button>
+      </form>
+    }
+  </section>
+
+  <div class="lists">
+    <section id="to-approve" class="list-section" aria-labelledby="to-approve-title">
+      <h2 id="to-approve-title">Requests to approve</h2>
+      <p class="muted">
+        Officers of your office that another office has asked for. Accepting moves the officer to
+        that office and ends their vehicle links.
+      </p>
+      <ng-container
+        [ngTemplateOutlet]="listTemplate"
+        [ngTemplateOutletContext]="{ state: outgoing(), direction: 'outgoing' }"
+      />
+    </section>
+
+    <section id="sent" class="list-section" aria-labelledby="sent-title">
+      <h2 id="sent-title">Requests I sent</h2>
+      <p class="muted">Officers you have asked other offices for.</p>
+      <ng-container
+        [ngTemplateOutlet]="listTemplate"
+        [ngTemplateOutletContext]="{ state: incoming(), direction: 'incoming' }"
+      />
+    </section>
+  </div>
+</div>
+
+<ng-template #listTemplate let-state="state" let-direction="direction">
+  @if (state.loading) {
+    <p class="muted" role="status">Loading requests…</p>
+  } @else if (state.error) {
+    <div class="card">
+      <app-load-error [message]="state.error" (retry)="load(direction)" />
+    </div>
+  } @else if (!state.rows.length) {
+    <div class="card">
+      <app-empty-state
+        icon="arrow-left-right"
+        [title]="direction === 'outgoing' ? 'No requests to approve' : 'No requests sent'"
+        [text]="
+          direction === 'outgoing'
+            ? 'When another office asks for one of your officers, the request shows up here.'
+            : 'You have not asked for any officers yet.'
+        "
+      />
+    </div>
+  } @else {
+    <ul class="transfers">
+      @for (transfer of state.rows; track transfer.id) {
+        <li class="card transfer">
+          <div class="transfer-head">
+            <span class="avatar"><app-icon name="shield" [size]="22" /></span>
+            <div class="who">
+              <strong>{{ transfer.officer_name }}</strong>
+              <p class="muted">Emp ID {{ transfer.officer_emp_id }}</p>
+            </div>
+            <app-status-badge [status]="transfer.status" />
+          </div>
+          <p class="route">{{ transfer.from_unit_name }} → {{ transfer.to_unit_name }}</p>
+          @if (transfer.note) {
+            <p>{{ transfer.note }}</p>
+          }
+          <p class="muted small">Requested {{ when(transfer.requested_at) }}</p>
+
+          @if (transfer.status === 'PENDING') {
+            <div class="decide">
+              @if (direction === 'outgoing') {
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  [disabled]="busyId() === transfer.id"
+                  (click)="accept(transfer)"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-danger"
+                  [disabled]="busyId() === transfer.id"
+                  (click)="reject(transfer)"
+                >
+                  Reject
+                </button>
+              } @else {
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  [disabled]="busyId() === transfer.id"
+                  (click)="cancel(transfer)"
+                >
+                  Cancel
+                </button>
+              }
+            </div>
+          }
+        </li>
+      }
+    </ul>
+  }
+</ng-template>

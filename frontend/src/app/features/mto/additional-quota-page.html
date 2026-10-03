@@ -1,0 +1,245 @@
+<div class="page">
+  <app-page-header
+    title="Additional quota"
+    subtitle="Give a vehicle extra fuel for this month or next, backed by the approval letter."
+  />
+
+  <section class="card search-card">
+    <form class="search" role="search" (submit)="applySearch($event)">
+      <div class="field">
+        <label for="vehicle-search">Search vehicle number</label>
+        <input
+          #box
+          id="vehicle-search"
+          type="search"
+          placeholder="AP39PA1234"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          [value]="searchText()"
+          (input)="searchText.set(box.value)"
+        />
+      </div>
+      <button type="submit" class="btn btn-primary">
+        <app-icon name="search" [size]="20" />
+        Search
+      </button>
+    </form>
+
+    @if (preselectId() !== null && preselected.loading()) {
+      <p class="muted" role="status">Loading vehicle…</p>
+    } @else if (preselectId() !== null && preselected.error()) {
+      <p class="error" role="alert">{{ preselected.error() }}</p>
+    }
+
+    @if (search()) {
+      @if (results.loading()) {
+        <p class="muted" role="status">Searching…</p>
+      } @else if (results.error()) {
+        <app-load-error [message]="results.error()" (retry)="results.load()" />
+      } @else if (!choices().length) {
+        <p class="muted">No vehicles match “{{ search() }}”.</p>
+      }
+    } @else if (!choices().length) {
+      <p class="muted">Search for a vehicle to add quota to it.</p>
+    }
+
+    @if (choices().length) {
+      <div class="vehicle-chips" role="group" aria-label="Vehicles found">
+        @for (choice of choices(); track choice.id) {
+          <button
+            type="button"
+            class="chip"
+            [class.active]="selected()?.id === choice.id"
+            [attr.aria-pressed]="selected()?.id === choice.id"
+            (click)="select(choice)"
+          >
+            {{ choice.registration_number }}
+          </button>
+        }
+      </div>
+    }
+  </section>
+
+  @if (selected(); as vehicle) {
+    <section id="quota-card" class="card quota-card" aria-labelledby="quota-title">
+      <div class="card-head">
+        <h2 id="quota-title">{{ vehicle.registration_number }}</h2>
+        @if (quota.data(); as current) {
+          <span class="muted">Fuel in {{ monthLabel(current.month) }}</span>
+        }
+      </div>
+      @if (quota.error()) {
+        <app-load-error [message]="quota.error()" (retry)="quota.load()" />
+      } @else if (quota.loading()) {
+        <p class="muted" role="status">Loading quota…</p>
+      } @else {
+        <div class="stats">
+          @for (stat of stats(); track stat.label) {
+            <app-stat-card
+              [icon]="stat.icon"
+              [label]="stat.label"
+              [value]="litres(stat.value)"
+              [tone]="stat.negative ? 'danger' : 'default'"
+            />
+          }
+        </div>
+      }
+    </section>
+
+    <form class="card grant-form" novalidate (submit)="save($event)">
+      <h2>Add quota</h2>
+
+      <div class="field">
+        <span class="field-label" id="grant-month-label">Month</span>
+        <div class="month-chips" role="group" aria-labelledby="grant-month-label">
+          @for (option of months; track option.value) {
+            <button
+              type="button"
+              class="chip"
+              [class.active]="month() === option.value"
+              [attr.aria-pressed]="month() === option.value"
+              (click)="month.set(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          }
+        </div>
+        <p class="month-hint muted">Adds to {{ monthLabel(month()) }}.</p>
+      </div>
+
+      <div class="form-grid" [formGroup]="form">
+        <div class="field">
+          <label for="grant-litres">Quantity (L) <span aria-hidden="true">*</span></label>
+          <input
+            id="grant-litres"
+            type="number"
+            inputmode="decimal"
+            step="any"
+            min="0"
+            formControlName="litres"
+            aria-required="true"
+            [attr.aria-invalid]="errors().litres ? 'true' : null"
+            [attr.aria-describedby]="errors().litres ? 'grant-litres-error' : null"
+            (input)="clearError('litres')"
+          />
+          @if (errors().litres) {
+            <div id="grant-litres-error" class="field-error" role="alert">
+              {{ errors().litres }}
+            </div>
+          }
+        </div>
+
+        <div class="field">
+          <label for="grant-approved-by">Approved by <span aria-hidden="true">*</span></label>
+          <input
+            id="grant-approved-by"
+            type="text"
+            autocomplete="off"
+            maxlength="120"
+            formControlName="approved_by"
+            aria-required="true"
+            [attr.aria-invalid]="errors().approved_by ? 'true' : null"
+            [attr.aria-describedby]="errors().approved_by ? 'grant-approved-by-error' : null"
+            (input)="clearError('approved_by')"
+          />
+          @if (errors().approved_by) {
+            <div id="grant-approved-by-error" class="field-error" role="alert">
+              {{ errors().approved_by }}
+            </div>
+          }
+        </div>
+
+        <div class="field full">
+          <span class="field-label" id="grant-letter-label">
+            Approval letter <span aria-hidden="true">*</span>
+          </span>
+          <div
+            class="drop-zone"
+            [class.dragging]="dragging()"
+            (dragover)="dragOver($event)"
+            (dragleave)="dragging.set(false)"
+            (drop)="drop($event)"
+          >
+            <app-icon name="upload" [size]="24" />
+            <p>Drag the letter here, or</p>
+            <label class="file-input">
+              <input
+                #letterInput
+                id="grant-letter"
+                type="file"
+                accept=".jpg,.jpeg,.png,.pdf"
+                aria-labelledby="grant-letter-label"
+                aria-required="true"
+                [attr.aria-invalid]="errors().letter ? 'true' : null"
+                [attr.aria-describedby]="
+                  errors().letter ? 'grant-letter-error' : 'grant-letter-hint'
+                "
+                (change)="chooseFile(letterInput)"
+              />
+              <span class="file-input-button">Choose file</span>
+              <span class="file-input-name">{{ letter()?.name ?? 'No file chosen' }}</span>
+            </label>
+          </div>
+          <p id="grant-letter-hint" class="hint muted">JPG, PNG or PDF, up to 5 MB.</p>
+          @if (errors().letter) {
+            <div id="grant-letter-error" class="field-error" role="alert">
+              {{ errors().letter }}
+            </div>
+          }
+        </div>
+
+        <div class="field full">
+          <label for="grant-note">Note</label>
+          <input
+            id="grant-note"
+            type="text"
+            autocomplete="off"
+            maxlength="255"
+            formControlName="note"
+          />
+        </div>
+      </div>
+
+      @if (formError()) {
+        <p class="error" role="alert">{{ formError() }}</p>
+      }
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" [disabled]="saving()">Add quota</button>
+      </div>
+    </form>
+
+    <section id="grants" class="card grants-card" aria-labelledby="grants-title">
+      <h2 id="grants-title">Added this month</h2>
+      @if (grants.error()) {
+        <app-load-error [message]="grants.error()" (retry)="grants.load()" />
+      } @else if (grants.loading()) {
+        <p class="muted" role="status">Loading…</p>
+      } @else if (!grants.data()?.length) {
+        <p class="muted">No additional quota added this month.</p>
+      } @else {
+        <ul class="grants">
+          @for (grant of grants.data(); track grant.id) {
+            <li class="grant">
+              <div class="grant-top">
+                <span class="amount">+{{ litres(grant.litres) }}</span>
+                <span class="muted">Approved by {{ grant.approved_by }}</span>
+              </div>
+              <p class="muted">
+                Added by {{ grant.created_by_name }} on {{ formatDateTime(grant.created_at) }}
+              </p>
+              @if (grant.note) {
+                <p>{{ grant.note }}</p>
+              }
+              <p>
+                <a [href]="grantLetter(grant)" target="_blank" rel="noopener noreferrer">
+                  View letter
+                </a>
+              </p>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+</div>

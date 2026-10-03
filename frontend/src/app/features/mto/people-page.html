@@ -1,0 +1,177 @@
+<div class="page">
+  <app-page-header [title]="title()" [subtitle]="subtitle()">
+    <button
+      type="button"
+      class="btn btn-primary"
+      aria-controls="person-form"
+      [attr.aria-expanded]="formOpen()"
+      (click)="openAdd()"
+    >
+      <app-icon name="plus" [size]="18" />
+      Add {{ noun() }}
+    </button>
+  </app-page-header>
+
+  @if (formOpen()) {
+    <div id="person-form" class="form-slot">
+      <app-person-form
+        [kind]="kind()"
+        [person]="editing()"
+        (saved)="saved()"
+        (cancelled)="closeForm()"
+      />
+    </div>
+  }
+
+  <div class="toolbar">
+    <form class="search" role="search" (submit)="applySearch($event)">
+      <div class="field">
+        <label for="people-search" class="sr-only">Search by name or Emp ID</label>
+        <input
+          #box
+          id="people-search"
+          type="search"
+          placeholder="Search by name or Emp ID"
+          autocomplete="off"
+          [value]="searchText()"
+          (input)="typeSearch(box.value)"
+        />
+      </div>
+      <button type="submit" class="btn-icon" aria-label="Search">
+        <app-icon name="search" [size]="20" />
+      </button>
+    </form>
+    <div class="chips" role="group" aria-label="Filter by status">
+      @for (chip of chips(); track chip.label) {
+        <button
+          type="button"
+          class="chip"
+          [class.active]="status() === chip.value"
+          [attr.aria-pressed]="status() === chip.value"
+          (click)="choose(chip.value)"
+        >
+          {{ chip.label }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+    <p class="muted" role="status">Loading {{ title().toLowerCase() }}…</p>
+  } @else if (loadError()) {
+    <div class="card">
+      <app-load-error [message]="loadError()" (retry)="load()" />
+    </div>
+  } @else if (!people().length) {
+    <div class="card">
+      <app-empty-state
+        icon="users"
+        [title]="
+          filtered()
+            ? 'No ' + title().toLowerCase() + ' match'
+            : 'No ' + title().toLowerCase() + ' yet'
+        "
+        [text]="
+          filtered()
+            ? 'Try a different search or status.'
+            : 'Add your first ' + noun() + ' to get started.'
+        "
+      />
+    </div>
+  } @else {
+    <div class="people-wrap">
+      <table class="people">
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Emp ID</th>
+            <th scope="col">Mobile</th>
+            <th scope="col">Current vehicle</th>
+            <th scope="col">Status</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (person of people(); track person.id) {
+            <tr class="person">
+              <td data-label="Name" class="name">{{ person.full_name }}</td>
+              <td data-label="Emp ID">{{ person.emp_id || '—' }}</td>
+              <td data-label="Mobile">{{ person.mobile || '—' }}</td>
+              <td data-label="Current vehicle">{{ vehicles(person) }}</td>
+              <td data-label="Status">
+                <app-status-badge [status]="person.status" [label]="person.status_label" />
+              </td>
+              <td data-label="Actions">
+                <div class="actions btn-group-sm">
+                  @if (canEdit(person)) {
+                    <button type="button" class="btn btn-secondary" (click)="openEdit(person)">
+                      Edit
+                    </button>
+                  }
+                  @if (person.status === 'ACTIVE') {
+                    <button
+                      type="button"
+                      class="btn btn-secondary"
+                      [disabled]="busyId() === person.id"
+                      (click)="act(person, 'pause')"
+                    >
+                      Pause
+                    </button>
+                  } @else if (person.status === 'PAUSED') {
+                    <button
+                      type="button"
+                      class="btn btn-secondary"
+                      [disabled]="busyId() === person.id"
+                      (click)="act(person, 'resume')"
+                    >
+                      Resume
+                    </button>
+                  }
+                  @if (inService(person)) {
+                    <app-confirm-button label="Terminate" (confirmed)="act(person, 'terminate')" />
+                    <button type="button" class="btn btn-ghost" (click)="openReset(person)">
+                      Reset password
+                    </button>
+                  }
+                  @if (resetFor() === person.id) {
+                    <form class="reset" (submit)="submitReset($event, person)">
+                      <div class="field">
+                        <label [for]="'reset-' + person.id" class="sr-only">
+                          New password for {{ person.full_name }}
+                        </label>
+                        <input
+                          #password
+                          [id]="'reset-' + person.id"
+                          type="password"
+                          placeholder="New password"
+                          autocomplete="new-password"
+                          [value]="resetValue()"
+                          (input)="resetValue.set(password.value)"
+                        />
+                      </div>
+                      @if (resetError()) {
+                        <p class="error" role="alert">{{ resetError() }}</p>
+                      }
+                      <div class="reset-actions">
+                        <button
+                          type="submit"
+                          class="btn btn-primary"
+                          [disabled]="busyId() === person.id"
+                        >
+                          Set password
+                        </button>
+                        <button type="button" class="btn btn-ghost" (click)="closeReset()">
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

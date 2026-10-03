@@ -1,0 +1,174 @@
+<div class="page">
+  <app-page-header
+    title="Stock"
+    subtitle="Record the morning measurement and each tanker delivery for your pump's tanks."
+  />
+
+  @if (tanks.loading()) {
+    <p class="muted" role="status">Loading the tanks…</p>
+  } @else if (tanks.error()) {
+    <div class="card">
+      <app-load-error [message]="tanks.error()" (retry)="tanks.load()" />
+    </div>
+  } @else if (!tanks.data()?.length) {
+    <div class="card">
+      <app-empty-state
+        icon="gauge"
+        title="No tanks to show."
+        text="Only police pumps keep stock. Ask your MTO if this pump should have tanks."
+      />
+    </div>
+  } @else {
+    <div id="tanks-card" class="tanks">
+      @for (tank of tanks.data(); track tank.id) {
+        <section class="card">
+          <app-tank-level [tank]="tank" />
+        </section>
+      }
+    </div>
+
+    <div class="forms">
+      <section class="card" aria-labelledby="measure-title">
+        <h2 id="measure-title">Morning measurement</h2>
+        <form id="measure-form" novalidate [formGroup]="measureForm" (ngSubmit)="measure()">
+          <p class="hint muted">Sets the stock to what the tank holds now.</p>
+          <div>
+            <div class="group-label" id="measure-fuel-label">Fuel</div>
+            <div class="chips" role="group" aria-labelledby="measure-fuel-label">
+              @for (tank of tanks.data(); track tank.id) {
+                <button
+                  type="button"
+                  class="chip"
+                  [class.active]="measureId() === tank.id"
+                  [attr.aria-pressed]="measureId() === tank.id"
+                  (click)="chooseForMeasurement(tank.id)"
+                >
+                  {{ fuelLabel(tank.fuel_type) }}
+                </button>
+              }
+            </div>
+          </div>
+          <div class="field litres-box">
+            <label for="measure-litres">Litres in the tank</label>
+            <input
+              id="measure-litres"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              step="0.01"
+              formControlName="litres"
+            />
+            <span aria-hidden="true">L</span>
+          </div>
+          @if (measureError()) {
+            <p class="error form-error" role="alert">{{ measureError() }}</p>
+          }
+          <button type="submit" class="btn btn-primary" [disabled]="measuring()">
+            Record measurement
+          </button>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="receipt-title">
+        <h2 id="receipt-title">Tanker receipt</h2>
+        <form id="receipt-form" novalidate [formGroup]="receiptForm" (ngSubmit)="receive()">
+          <p class="hint muted">Adds the litres delivered to the stock.</p>
+          <div>
+            <div class="group-label" id="receipt-fuel-label">Fuel</div>
+            <div class="chips" role="group" aria-labelledby="receipt-fuel-label">
+              @for (tank of tanks.data(); track tank.id) {
+                <button
+                  type="button"
+                  class="chip"
+                  [class.active]="receiptId() === tank.id"
+                  [attr.aria-pressed]="receiptId() === tank.id"
+                  (click)="chooseForReceipt(tank.id)"
+                >
+                  {{ fuelLabel(tank.fuel_type) }}
+                </button>
+              }
+            </div>
+          </div>
+          <div class="field litres-box">
+            <label for="receipt-litres">Litres received</label>
+            <input
+              id="receipt-litres"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              step="0.01"
+              formControlName="litres"
+            />
+            <span aria-hidden="true">L</span>
+          </div>
+          <div class="field">
+            <label for="receipt-note">Note (optional)</label>
+            <input
+              id="receipt-note"
+              type="text"
+              maxlength="200"
+              formControlName="note"
+              placeholder="Tanker or invoice number"
+            />
+          </div>
+          @if (receiptError()) {
+            <p class="error form-error" role="alert">{{ receiptError() }}</p>
+          }
+          <button type="submit" class="btn btn-primary" [disabled]="receiving()">
+            Record receipt
+          </button>
+        </form>
+      </section>
+    </div>
+
+    <div class="entries-list">
+      @for (tank of tanks.data(); track tank.id) {
+        @let panel = entriesOf(tank);
+        <section class="card entries" [attr.aria-labelledby]="'entries-' + tank.id + '-title'">
+          <h3 [id]="'entries-' + tank.id + '-title'">
+            {{ fuelLabel(tank.fuel_type) }} entries this month
+          </h3>
+          @if (panel.error()) {
+            <app-load-error [message]="panel.error()" (retry)="panel.load()" small />
+          } @else if (panel.loading()) {
+            <p class="muted" role="status">Loading entries…</p>
+          } @else if (!panel.data()?.length) {
+            <p class="muted">No stock entries this month.</p>
+          } @else {
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Entry</th>
+                    <th scope="col">Litres</th>
+                    <th scope="col">Before → after</th>
+                    <th scope="col">By</th>
+                    <th scope="col">When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of panel.data(); track row.id) {
+                    <tr>
+                      <td>
+                        {{ row.kind_label }}
+                        @if (row.note) {
+                          <div class="sub">{{ row.note }}</div>
+                        }
+                      </td>
+                      <td class="number">{{ litres(row.litres) }}</td>
+                      <td class="number">
+                        {{ litres(row.stock_before) }} → {{ litres(row.stock_after) }}
+                      </td>
+                      <td>{{ row.recorded_by_name }}</td>
+                      <td>{{ formatDateTime(row.recorded_at) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+      }
+    </div>
+  }
+</div>

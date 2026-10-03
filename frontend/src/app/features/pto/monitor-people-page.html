@@ -1,0 +1,89 @@
+<div class="page">
+  <app-page-header [title]="page().title" [subtitle]="page().subtitle">
+    <app-download-button [url]="exportUrl()" [params]="filters()" />
+  </app-page-header>
+
+  <app-monitor-filter-bar
+    [statuses]="statuses()"
+    searchLabel="Name or Emp ID"
+    (filtersChange)="applyFilters($event)"
+  />
+
+  @if (people.loading()) {
+    <p class="muted" role="status">Loading {{ kind() }}…</p>
+  } @else if (people.error()) {
+    <div class="card">
+      <app-load-error [message]="people.error()" (retry)="people.load()" />
+    </div>
+  } @else if (people.data(); as data) {
+    @if (!data.results.length) {
+      <div class="card">
+        <app-empty-state
+          icon="user"
+          [title]="page().none"
+          text="Try another office, status or name."
+        />
+      </div>
+    } @else {
+      <ul class="rows">
+        @for (person of data.results; track person.id) {
+          <li class="card row person">
+            <div class="top">
+              <span class="name">{{ person.full_name }}</span>
+              <app-status-badge [status]="person.status" [label]="person.status_label" />
+            </div>
+            <p class="meta muted">
+              {{ person.emp_id || '—'
+              }}{{ person.designation_name ? ' · ' + person.designation_name : '' }}
+            </p>
+            <p class="office-line muted">{{ person.unit_name }}</p>
+            <p class="line mobile">
+              <span class="line-label">Mobile</span>&ngsp;
+              @if (person.mobile) {
+                {{ person.mobile }}
+              } @else {
+                <span class="muted">Not given</span>
+              }
+            </p>
+            <p class="line vehicles">
+              <span class="line-label">{{
+                person.current_vehicles.length > 1 ? 'Vehicles' : 'Vehicle'
+              }}</span
+              >&ngsp;
+              @if (person.current_vehicles.length) {
+                {{ vehicleNames(person) }}
+              } @else {
+                <span class="muted">None linked</span>
+              }
+            </p>
+            @if (isDrivers()) {
+              @let driver = asDriver(person);
+              <p class="line licence">
+                <span class="line-label">Licence</span>&ngsp;
+                @if (driver.licence_number) {
+                  {{ driver.licence_number
+                  }}{{
+                    driver.licence_valid_till
+                      ? ', valid till ' + formatDate(driver.licence_valid_till)
+                      : ''
+                  }}
+                } @else {
+                  <span class="muted">Not given</span>
+                }
+              </p>
+              <p class="line month">
+                <span class="line-label">This month</span>&ngsp;{{ monthText(driver) }}
+              </p>
+              @if (driver.overdue_duty > 0) {
+                <div>
+                  <span class="badge badge-danger overdue-badge">{{ overdueText(driver) }}</span>
+                </div>
+              }
+            }
+          </li>
+        }
+      </ul>
+      <app-monitor-pager [page]="data" (pageChange)="goTo($event)" />
+    }
+  }
+</div>

@@ -1,0 +1,118 @@
+<form class="card" [formGroup]="form" (ngSubmit)="save()">
+  <h2>{{ adding() ? 'Add pump' : 'Edit ' + pump()!.name }}</h2>
+
+  <fieldset>
+    <legend class="group-label" id="pump-kind-label">Kind</legend>
+    <div class="kind-cards">
+      @for (kind of kinds; track kind.value) {
+        <label class="kind-card">
+          <input type="radio" formControlName="kind" [value]="kind.value" />
+          <span class="kind-body">
+            <app-icon [name]="kind.icon" [size]="26" />
+            <strong>{{ kind.label }}</strong>
+            <span class="muted">{{ kind.hint }}</span>
+          </span>
+        </label>
+      }
+    </div>
+  </fieldset>
+
+  <div class="form-grid">
+    <div class="field">
+      <label for="pump-name">Name</label>
+      <input
+        #nameField
+        id="pump-name"
+        type="text"
+        formControlName="name"
+        autocomplete="off"
+        placeholder="Nellore Police Pump"
+      />
+    </div>
+    <div class="field">
+      <label for="pump-hours">Opening hours</label>
+      <input id="pump-hours" type="text" formControlName="opening_hours" autocomplete="off" />
+    </div>
+    <div class="field full">
+      <label for="pump-address">Address</label>
+      <input id="pump-address" type="text" formControlName="address" autocomplete="off" />
+    </div>
+    <div class="field">
+      @if (districtList.error()) {
+        <span class="field-label">District</span>
+        <app-load-error [message]="districtList.error()" (retry)="districtList.load()" small />
+      } @else {
+        <label for="pump-district">District</label>
+        <select id="pump-district" formControlName="district">
+          <option [ngValue]="null" disabled>
+            {{ districtList.loading() ? 'Loading…' : 'Select district' }}
+          </option>
+          @for (district of districts(); track district.id) {
+            <option [ngValue]="district.id">{{ district.name }}</option>
+          }
+        </select>
+      }
+    </div>
+    <div class="field">
+      <span class="field-label" id="pump-fuel-label">Fuels sold</span>
+      <div class="fuel-checks" role="group" aria-labelledby="pump-fuel-label">
+        @for (fuel of fuels; track fuel.key) {
+          <div class="field-inline">
+            <input type="checkbox" [id]="fuel.id" [formControlName]="fuel.key" />
+            <label [for]="fuel.id">{{ fuel.label }}</label>
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+
+  <div class="location">
+    <div>
+      <h3>Location</h3>
+      <p class="muted">Click the map to place the pin, or type the latitude and longitude.</p>
+    </div>
+    <app-map-view
+      [markers]="markers()"
+      [center]="mapCenter()"
+      [zoom]="pickZoom"
+      [pickable]="true"
+      (mapClick)="pick($event)"
+    />
+    <div class="form-grid">
+      <div class="field">
+        <label for="pump-latitude">Latitude</label>
+        <input
+          #latitudeField
+          id="pump-latitude"
+          type="number"
+          inputmode="decimal"
+          step="any"
+          formControlName="latitude"
+          (input)="typed(latitudeField.value, longitudeField.value)"
+        />
+      </div>
+      <div class="field">
+        <label for="pump-longitude">Longitude</label>
+        <input
+          #longitudeField
+          id="pump-longitude"
+          type="number"
+          inputmode="decimal"
+          step="any"
+          formControlName="longitude"
+          (input)="typed(latitudeField.value, longitudeField.value)"
+        />
+      </div>
+    </div>
+  </div>
+
+  @if (error()) {
+    <p class="error" role="alert">{{ error() }}</p>
+  }
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary" [disabled]="saving()">
+      {{ adding() ? 'Add pump' : 'Save changes' }}
+    </button>
+    <button type="button" class="btn btn-ghost" (click)="cancelled.emit()">Cancel</button>
+  </div>
+</form>

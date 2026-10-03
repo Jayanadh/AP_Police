@@ -1,0 +1,104 @@
+<div class="page">
+  <app-page-header
+    title="Vehicles"
+    subtitle="Every office’s vehicles: who uses them, this month’s fuel, the odometer and servicing. This view is read only; each office’s MTO makes changes."
+  >
+    <app-download-button [url]="exportUrl" [params]="filters()" />
+  </app-page-header>
+
+  <app-monitor-filter-bar
+    [statuses]="statuses"
+    searchLabel="Registration"
+    searchPlaceholder="AP39PA1234"
+    (filtersChange)="applyFilters($event)"
+  />
+
+  @if (vehicles.loading()) {
+    <p class="muted" role="status">Loading vehicles…</p>
+  } @else if (vehicles.error()) {
+    <div class="card">
+      <app-load-error [message]="vehicles.error()" (retry)="vehicles.load()" />
+    </div>
+  } @else if (vehicles.data(); as data) {
+    @if (!data.results.length) {
+      <div class="card">
+        <app-empty-state
+          icon="car"
+          title="No vehicles match."
+          text="Try another office, status or registration."
+        />
+      </div>
+    } @else {
+      <ul class="rows">
+        @for (vehicle of data.results; track vehicle.id) {
+          @let share = usage(vehicle.used_litres, vehicle.limit_litres);
+          <li class="card row vehicle">
+            <div class="top">
+              <div>
+                <span class="registration">{{ vehicle.registration_number }}</span>
+                <span class="muted">{{ vehicle.make }} {{ vehicle.model }}</span>
+              </div>
+              <app-status-badge [status]="vehicle.status" [label]="vehicle.status_label" />
+            </div>
+            <p class="office-line muted">{{ vehicle.unit_name }}</p>
+
+            <p class="line driver">
+              <span class="line-label">Driver</span>&ngsp;
+              @if (vehicle.driver; as driver) {
+                {{ driver.full_name }}{{ driver.mobile ? ' · ' + driver.mobile : '' }}
+              } @else {
+                <span class="muted">None linked</span>
+              }
+            </p>
+            <p class="line officer">
+              <span class="line-label">Officer</span>&ngsp;
+              @if (vehicle.officer; as officer) {
+                {{ officer.full_name }}{{ officer.mobile ? ' · ' + officer.mobile : '' }}
+              } @else {
+                <span class="muted">None linked</span>
+              }
+            </p>
+
+            <div class="fuel">
+              <div class="fuel-figures">
+                <span>
+                  <span class="line-label">This month</span>&ngsp;
+                  {{ litres(vehicle.used_litres) }} of {{ litres(vehicle.limit_litres) }}
+                </span>
+                <span class="muted">{{ left(vehicle) }}</span>
+              </div>
+              <div
+                class="progress"
+                [class.warning]="share.tone === 'warning'"
+                [class.danger]="share.tone === 'danger'"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                [attr.aria-label]="'Fuel used this month by ' + vehicle.registration_number"
+                [attr.aria-valuenow]="share.percent"
+              >
+                <span [style.width.%]="share.percent"></span>
+              </div>
+            </div>
+
+            <p class="line odometer">
+              <span class="line-label">Odometer</span>&ngsp;
+              @if (vehicle.last_odometer_km !== null) {
+                {{ km(vehicle.last_odometer_km) }}, week of
+                {{ formatDate(vehicle.last_odometer_week) }}
+              } @else {
+                <span class="muted">No reading yet</span>
+              }
+            </p>
+            @if (vehicle.service_due) {
+              <div>
+                <span class="badge badge-warning service-badge">Service due</span>
+              </div>
+            }
+          </li>
+        }
+      </ul>
+      <app-monitor-pager [page]="data" (pageChange)="goTo($event)" />
+    }
+  }
+</div>

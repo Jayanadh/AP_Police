@@ -1,0 +1,128 @@
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" routerLink="/">
+      <img class="brand-mark" src="logos/ap-police-mark.webp" alt="" width="38" height="40" />
+      <span>AP Police MTO</span>
+    </a>
+
+    <nav class="side-nav" aria-label="Main">
+      @for (item of items(); track item.link) {
+        <a
+          class="nav-row"
+          [routerLink]="item.link"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: item.link === home() }"
+          ariaCurrentWhenActive="page"
+        >
+          <app-icon [name]="item.icon" [size]="20" />
+          <span>{{ item.label }}</span>
+        </a>
+      }
+    </nav>
+
+    @if (user(); as me) {
+      <div class="side-user">
+        <div class="side-user-info">
+          <strong>{{ me.full_name }}</strong>
+          <span class="muted">{{ roleLabel() }}</span>
+        </div>
+        <button type="button" class="btn btn-secondary btn-block logout" (click)="logout()">
+          <app-icon name="log-out" [size]="18" />
+          Log out
+        </button>
+      </div>
+    }
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <a class="brand" routerLink="/">
+        <img class="brand-mark" src="logos/ap-police-mark.webp" alt="" width="38" height="40" />
+        <span>AP Police MTO</span>
+      </a>
+      <div class="top-actions">
+        <a
+          class="btn-icon bell"
+          routerLink="/alerts"
+          routerLinkActive="active"
+          ariaCurrentWhenActive="page"
+          [attr.aria-label]="bellLabel()"
+          title="Alerts"
+        >
+          <app-icon name="bell" [size]="22" />
+          @if (unread() > 0) {
+            <span class="bell-badge" aria-hidden="true">{{ unreadText() }}</span>
+          }
+        </a>
+        <a
+          class="btn-icon profile"
+          routerLink="/profile"
+          routerLinkActive="active"
+          ariaCurrentWhenActive="page"
+          aria-label="Profile"
+          title="Profile"
+        >
+          <app-icon name="user" [size]="22" />
+        </a>
+      </div>
+    </header>
+
+    <main class="content">
+      <router-outlet />
+    </main>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Quick links">
+    @for (item of bottomItems(); track item.link) {
+      <a
+        class="btn-icon"
+        [routerLink]="item.link"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: item.link === home() }"
+        ariaCurrentWhenActive="page"
+        [attr.aria-label]="item.label"
+        [title]="item.label"
+      >
+        <app-icon [name]="item.icon" [size]="22" />
+      </a>
+    }
+    <!-- always there: besides the pages that do not fit, it holds Log out -->
+    <button
+      #moreButton
+      type="button"
+      class="btn-icon more-button"
+      aria-label="More"
+      title="More"
+      aria-haspopup="dialog"
+      [attr.aria-expanded]="moreOpen()"
+      (click)="openMore()"
+    >
+      <app-icon name="menu" [size]="22" />
+    </button>
+  </nav>
+
+  @if (moreOpen()) {
+    <div class="sheet-backdrop" (click)="dismissMore()"></div>
+    <div #sheet class="sheet sheet-fixed" role="dialog" aria-label="More" tabindex="-1">
+      <nav class="more-grid" aria-label="All pages">
+        @for (item of items(); track item.link) {
+          <a
+            class="more-link"
+            (click)="closeMore()"
+            [routerLink]="item.link"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: item.link === home() }"
+            ariaCurrentWhenActive="page"
+          >
+            <app-icon [name]="item.icon" [size]="20" />
+            <span>{{ item.label }}</span>
+          </a>
+        }
+      </nav>
+      <button type="button" class="btn btn-secondary btn-block logout" (click)="logout()">
+        <app-icon name="log-out" [size]="18" />
+        Log out
+      </button>
+    </div>
+  }
+</div>

@@ -1,0 +1,129 @@
+<div class="page">
+  <app-page-header
+    title="Dashboard"
+    [subtitle]="monthText() ? 'Fuel and approvals for ' + monthText() : ''"
+  />
+
+  @if (loading()) {
+    <p class="muted" role="status">Loading the dashboard…</p>
+  } @else if (error()) {
+    <div class="card">
+      <app-load-error [message]="error()" (retry)="load()" />
+    </div>
+  } @else if (data(); as dashboard) {
+    <div class="stats">
+      <app-stat-card
+        icon="car"
+        label="Active vehicles"
+        [value]="dashboard.totals.vehicles_active"
+        tone="primary"
+      />
+      <app-stat-card icon="fuel" label="Fuel used this month" [value]="fuelText()" tone="primary" />
+      <app-stat-card
+        icon="gauge"
+        label="Low-stock tanks"
+        [value]="dashboard.totals.low_stock_tanks"
+        [tone]="dashboard.totals.low_stock_tanks > 0 ? 'danger' : 'default'"
+      />
+      <a class="stat-link" routerLink="/pto/approvals">
+        <app-stat-card
+          icon="check-circle"
+          label="Pending approvals"
+          [value]="dashboard.pending_approvals"
+          [tone]="dashboard.pending_approvals > 0 ? 'warning' : 'default'"
+        />
+      </a>
+    </div>
+
+    <h2>MTO offices</h2>
+
+    @if (!dashboard.units.length) {
+      <div class="card">
+        <app-empty-state
+          icon="building"
+          title="No MTO offices yet"
+          text="Add an MTO office to see its vehicles and fuel here."
+        >
+          <a class="btn btn-primary" routerLink="/pto/units">Add MTO office</a>
+        </app-empty-state>
+      </div>
+    } @else {
+      <ng-template #fuelBar let-unit>
+        <div
+          class="progress"
+          [class.warning]="barTone(unit) === 'warning'"
+          [class.danger]="barTone(unit) === 'danger'"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          [attr.aria-valuenow]="percent(unit)"
+          [attr.aria-label]="'Fuel used this month by ' + unit.name"
+        >
+          <span [style.width.%]="percent(unit)"></span>
+        </div>
+      </ng-template>
+
+      <section class="card table-card">
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">Office</th>
+                <th scope="col">Vehicles</th>
+                <th scope="col">Fuel this month</th>
+                <th scope="col">Low-stock tanks</th>
+                <th scope="col">Pending emergencies</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (unit of dashboard.units; track unit.id) {
+                <tr>
+                  <td>
+                    <strong>{{ unit.name }}</strong>
+                    <span class="office-code muted">&ngsp;{{ unit.code }}</span>
+                  </td>
+                  <td>{{ unit.vehicles_active }} active · {{ unit.vehicles_paused }} paused</td>
+                  <td class="fuel-cell">
+                    <span class="fuel-figure">{{ fuel(unit) }}</span>
+                    <ng-container *ngTemplateOutlet="fuelBar; context: { $implicit: unit }" />
+                  </td>
+                  <td>{{ unit.low_stock_tanks }}</td>
+                  <td>{{ unit.pending_emergencies }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="office-cards">
+        @for (unit of dashboard.units; track unit.id) {
+          <section class="card office-card">
+            <h3>{{ unit.name }}</h3>
+            <dl>
+              <div class="figure">
+                <dt>Vehicles</dt>
+                <dd>{{ unit.vehicles_active }} active · {{ unit.vehicles_paused }} paused</dd>
+              </div>
+              <div class="figure fuel">
+                <dt>Fuel this month</dt>
+                <dd>
+                  <span>{{ fuel(unit) }}</span>
+                  <ng-container *ngTemplateOutlet="fuelBar; context: { $implicit: unit }" />
+                </dd>
+              </div>
+              <div class="figure">
+                <dt>Low-stock tanks</dt>
+                <dd>{{ unit.low_stock_tanks }}</dd>
+              </div>
+              <div class="figure">
+                <dt>Pending emergencies</dt>
+                <dd>{{ unit.pending_emergencies }}</dd>
+              </div>
+            </dl>
+          </section>
+        }
+      </div>
+    }
+  }
+</div>

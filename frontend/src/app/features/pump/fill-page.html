@@ -1,0 +1,198 @@
+<div class="page">
+  <app-page-header
+    title="Fill a vehicle"
+    subtitle="Pick the vehicle at the pump, enter the driver's PIN, then fill the litres it shows."
+  />
+
+  <div class="layout">
+    <div class="side">
+      @if (outcome(); as result) {
+        @if (result.ok) {
+          <section
+            id="fill-result"
+            class="card result result-ok"
+            role="status"
+            aria-labelledby="result-title"
+          >
+            <div class="result-head">
+              <app-icon name="check-circle" [size]="26" />
+              <h2 id="result-title">Filled</h2>
+            </div>
+            <p class="result-vehicle">{{ result.fill.registration_number }}</p>
+            <p class="result-litres">{{ litres(result.fill.litres_filled) }}</p>
+            <p class="muted">Driver: {{ result.fill.driver_name }}</p>
+            @if (isEmergency(result.fill)) {
+              <span class="badge emergency-badge">
+                Emergency fill: {{ litres(result.fill.emergency_litres) }}
+              </span>
+            }
+          </section>
+        } @else {
+          <section
+            id="fill-result"
+            class="card result result-error"
+            role="alert"
+            aria-labelledby="result-title"
+          >
+            <div class="result-head">
+              <app-icon name="x-circle" [size]="26" />
+              <h2 id="result-title">Not filled</h2>
+            </div>
+            <p class="result-message">{{ result.message }}</p>
+          </section>
+        }
+      }
+
+      @if (selected(); as request) {
+        <section id="fill-card" class="card card-hero" aria-labelledby="fill-title">
+          <button type="button" class="btn btn-ghost btn-sm back" (click)="back()">
+            <app-icon name="chevron-left" [size]="18" />
+            Back
+          </button>
+          <div class="chosen">
+            <h2 id="fill-title" class="chosen-vehicle">{{ request.registration_number }}</h2>
+            <p class="muted">{{ request.vehicle_name }} · {{ fuelLabel(request.fuel_type) }}</p>
+            <p>Driver: {{ request.driver_name }}</p>
+          </div>
+
+          @if (checked(); as ok) {
+            <div class="to-fill">
+              <p class="muted to-fill-label">Litres to fill</p>
+              <p id="fill-litres" class="to-fill-litres">{{ litres(ok.litres_requested) }}</p>
+              @if (ok.is_emergency) {
+                <span class="badge emergency-badge">Emergency: {{ ok.emergency_reason }}</span>
+              }
+            </div>
+            @if (formError()) {
+              <p class="error form-error" role="alert">{{ formError() }}</p>
+            }
+            <button
+              type="button"
+              class="btn btn-primary btn-block fill-submit"
+              [disabled]="saving()"
+              (click)="fill()"
+            >
+              <app-icon name="fuel" [size]="22" />
+              Fill {{ litres(ok.litres_requested) }}
+            </button>
+          } @else {
+            <form id="pin-form" novalidate (submit)="$event.preventDefault(); checkPin()">
+              <div class="field">
+                <label for="fill-pin">Driver's PIN</label>
+                <input
+                  id="fill-pin"
+                  type="text"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="off"
+                  placeholder="••••••"
+                  [value]="pin()"
+                  (input)="typePin($event)"
+                  (focus)="selectAll($event)"
+                />
+              </div>
+              @if (formError()) {
+                <p class="error form-error" role="alert">{{ formError() }}</p>
+              }
+              <button
+                type="submit"
+                class="btn btn-primary btn-block fill-submit"
+                [disabled]="saving()"
+              >
+                <app-icon name="lock" [size]="20" />
+                Check PIN
+              </button>
+            </form>
+          }
+        </section>
+      }
+
+      <section id="incoming" class="card" aria-labelledby="incoming-title">
+        <div class="section-head">
+          <h2 id="incoming-title">Waiting at this pump</h2>
+          <button type="button" class="btn btn-secondary btn-sm" (click)="incoming.load(true)">
+            <app-icon name="refresh" [size]="16" />
+            Refresh
+          </button>
+        </div>
+        @if (incoming.loading()) {
+          <p class="muted" role="status">Loading the waiting vehicles…</p>
+        } @else if (incoming.error()) {
+          <app-load-error [message]="incoming.error()" (retry)="incoming.load()" small />
+        } @else if (!incoming.data()?.length) {
+          <app-empty-state
+            icon="car"
+            title="No vehicles waiting."
+            text="A driver's request shows up here once they pick this pump."
+          />
+        } @else {
+          <ul class="incoming-list">
+            @for (request of incoming.data(); track request.id) {
+              <li class="incoming-row" [class.chosen-row]="selected()?.id === request.id">
+                <button
+                  type="button"
+                  class="pick"
+                  [attr.aria-pressed]="selected()?.id === request.id"
+                  (click)="choose(request)"
+                >
+                  <span class="registration">{{ request.registration_number }}</span>
+                  <span class="muted">{{ request.vehicle_name }}</span>
+                  <span class="meta">
+                    {{ request.driver_name }} · Asked {{ formatTime(request.issued_at) }}
+                  </span>
+                  <span class="badges">
+                    <span class="badge">{{ fuelLabel(request.fuel_type) }}</span>
+                    @if (request.is_emergency) {
+                      <span class="badge emergency-badge">Emergency</span>
+                    }
+                  </span>
+                </button>
+                @if (request.driver_mobile) {
+                  <a
+                    class="btn-icon call"
+                    [href]="'tel:' + request.driver_mobile"
+                    [attr.aria-label]="'Call ' + request.driver_name"
+                  >
+                    <app-icon name="phone" [size]="18" />
+                  </a>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    </div>
+
+    <section id="fills-card" class="card" aria-labelledby="fills-title">
+      <h2 id="fills-title">Today's fills at this pump</h2>
+      @if (fills.loading()) {
+        <p class="muted" role="status">Loading today's fills…</p>
+      } @else if (fills.error()) {
+        <app-load-error [message]="fills.error()" (retry)="fills.load()" small />
+      } @else if (!fills.data()?.length) {
+        <app-empty-state
+          icon="fuel"
+          title="No fills today yet."
+          text="Each fill you make shows up here."
+        />
+      } @else {
+        <ul class="fills">
+          @for (fill of fills.data(); track fill.id) {
+            <li class="fill">
+              <div class="top">
+                <span class="registration">{{ fill.registration_number }}</span>
+                <span class="amount">{{ litres(fill.litres_filled) }}</span>
+              </div>
+              <p class="meta muted">{{ fill.driver_name }} · {{ formatTime(fill.filled_at) }}</p>
+              @if (isEmergency(fill)) {
+                <span class="badge emergency-badge"
+                  >Emergency {{ litres(fill.emergency_litres) }}</span
+                >
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  </div>
+</div>

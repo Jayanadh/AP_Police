@@ -1,0 +1,254 @@
+<div class="page">
+  <app-page-header title="MTO offices" subtitle="Each office has one MTO chair login.">
+    @if (!loading() && !loadError()) {
+      <button
+        type="button"
+        class="btn btn-primary"
+        aria-controls="add-form"
+        [attr.aria-expanded]="showAdd()"
+        (click)="openAdd()"
+      >
+        <app-icon name="plus" [size]="18" />
+        Add MTO office
+      </button>
+    }
+  </app-page-header>
+
+  @if (showAdd()) {
+    <form id="add-form" class="card form-card add-card" [formGroup]="addForm" (ngSubmit)="create()">
+      <section>
+        <h3>Office</h3>
+        <div class="form-grid">
+          <div class="field">
+            <label for="unit-name">Office name</label>
+            <input id="unit-name" type="text" formControlName="name" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="unit-code">Office code</label>
+            <input id="unit-code" type="text" formControlName="code" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="unit-district">District</label>
+            <select id="unit-district" formControlName="district">
+              <option [ngValue]="null" disabled>Select district</option>
+              @for (district of districts(); track district.id) {
+                <option [ngValue]="district.id">{{ district.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="field">
+            <label for="unit-phone">Phone</label>
+            <input id="unit-phone" type="tel" formControlName="phone" autocomplete="off" />
+          </div>
+          <div class="field full">
+            <label for="unit-address">Address</label>
+            <input id="unit-address" type="text" formControlName="address" autocomplete="off" />
+          </div>
+        </div>
+      </section>
+
+      <section formGroupName="mto">
+        <h3>MTO login</h3>
+        <div class="form-grid">
+          <div class="field">
+            <label for="mto-username">Login ID</label>
+            <input
+              id="mto-username"
+              type="text"
+              formControlName="username"
+              autocomplete="off"
+              autocapitalize="none"
+            />
+          </div>
+          <div class="field">
+            <label for="mto-password">First password</label>
+            <input
+              id="mto-password"
+              type="password"
+              formControlName="password"
+              autocomplete="new-password"
+            />
+            <p class="muted hint">They will be asked to change it when they first log in.</p>
+          </div>
+          <div class="field">
+            <label for="mto-name">Holder name</label>
+            <input id="mto-name" type="text" formControlName="full_name" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="mto-emp">Emp ID</label>
+            <input id="mto-emp" type="text" formControlName="emp_id" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="mto-designation">Designation</label>
+            <select id="mto-designation" formControlName="designation">
+              <option [ngValue]="null" disabled>Select designation</option>
+              @for (designation of designations(); track designation.id) {
+                <option [ngValue]="designation.id">{{ designation.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="field">
+            <label for="mto-cadre">Cadre</label>
+            <select id="mto-cadre" formControlName="cadre">
+              <option [ngValue]="null" disabled>Select cadre</option>
+              @for (cadre of cadres(); track cadre.id) {
+                <option [ngValue]="cadre.id">{{ cadre.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="field">
+            <label for="mto-mobile">Mobile</label>
+            <input
+              id="mto-mobile"
+              type="tel"
+              inputmode="numeric"
+              maxlength="10"
+              formControlName="mobile"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+      </section>
+
+      @if (addError()) {
+        <p class="error" role="alert">{{ addError() }}</p>
+      }
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" [disabled]="adding()">Add office</button>
+        <button type="button" class="btn btn-ghost" (click)="cancelAdd()">Cancel</button>
+      </div>
+    </form>
+  }
+
+  @if (loading()) {
+    <p class="muted" role="status">Loading offices…</p>
+  } @else if (loadError()) {
+    <div class="card">
+      <app-load-error [message]="loadError()" (retry)="load()" />
+    </div>
+  } @else if (!units().length) {
+    <div class="card">
+      <app-empty-state
+        icon="building"
+        title="No MTO offices yet"
+        text="Add the first MTO office and its chair login to get started."
+      />
+    </div>
+  } @else {
+    <div class="grid-2">
+      @for (unit of units(); track unit.id) {
+        <section class="card office-card">
+          <div class="office-head">
+            <span class="office-icon"><app-icon name="building" [size]="22" /></span>
+            <div class="office-title">
+              <h2>{{ unit.name }}</h2>
+              <p class="muted">{{ unit.district_name }}</p>
+            </div>
+            <span class="badge badge-muted">{{ unit.code }}</span>
+          </div>
+
+          @if (unit.mto; as mto) {
+            <dl class="holder">
+              <div>
+                <dt>MTO</dt>
+                <dd>{{ mto.full_name }}</dd>
+              </div>
+              <div>
+                <dt>Login ID</dt>
+                <dd>{{ mto.username }}</dd>
+              </div>
+              <div>
+                <dt>Mobile</dt>
+                <dd>{{ mto.mobile || '—' }}</dd>
+              </div>
+            </dl>
+            @if (handoverFor() !== unit.id) {
+              <div>
+                <button type="button" class="btn btn-secondary" (click)="openHandover(unit)">
+                  <app-icon name="arrow-left-right" [size]="18" />
+                  Hand over chair
+                </button>
+              </div>
+            }
+          } @else {
+            <p class="muted">No MTO chair in this office.</p>
+          }
+
+          @if (handoverFor() === unit.id) {
+            <form
+              id="handover-form"
+              class="handover form-card"
+              [formGroup]="handoverForm"
+              (ngSubmit)="handover(unit)"
+            >
+              <h3>Hand over chair</h3>
+              <p class="muted hint">
+                The login ID stays the same. The new holder gets the password below and sets their
+                own at first login.
+              </p>
+              <div class="form-grid">
+                <div class="field">
+                  <label for="ho-name">Holder name</label>
+                  <input id="ho-name" type="text" formControlName="full_name" autocomplete="off" />
+                </div>
+                <div class="field">
+                  <label for="ho-emp">Emp ID</label>
+                  <input id="ho-emp" type="text" formControlName="emp_id" autocomplete="off" />
+                </div>
+                <div class="field">
+                  <label for="ho-designation">Designation</label>
+                  <select id="ho-designation" formControlName="designation">
+                    <option [ngValue]="null" disabled>Select designation</option>
+                    @for (designation of designations(); track designation.id) {
+                      <option [ngValue]="designation.id">{{ designation.name }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="ho-cadre">Cadre</label>
+                  <select id="ho-cadre" formControlName="cadre">
+                    <option [ngValue]="null" disabled>Select cadre</option>
+                    @for (cadre of cadres(); track cadre.id) {
+                      <option [ngValue]="cadre.id">{{ cadre.name }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="ho-mobile">Mobile</label>
+                  <input
+                    id="ho-mobile"
+                    type="tel"
+                    inputmode="numeric"
+                    maxlength="10"
+                    formControlName="mobile"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="field">
+                  <label for="ho-password">New password</label>
+                  <input
+                    id="ho-password"
+                    type="password"
+                    formControlName="password"
+                    autocomplete="new-password"
+                  />
+                </div>
+              </div>
+              @if (handoverError()) {
+                <p class="error" role="alert">{{ handoverError() }}</p>
+              }
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary" [disabled]="handingOver()">
+                  Hand over
+                </button>
+                <button type="button" class="btn btn-ghost" (click)="cancelHandover()">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          }
+        </section>
+      }
+    </div>
+  }
+</div>

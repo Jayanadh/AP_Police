@@ -1,0 +1,30 @@
+// Design tokens, modelled on the warm amber petrol-station reference app.
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f2f3f5;
+  --text: #1c1c1e;
+  --muted: #676e7c;
+  --border: #ecedf0;
+
+  --primary: #e8b04f;
+  --primary-strong: #d9982b;
+  --on-primary: #1c1c1e;
+  --accent: #f07a5a;
+
+  --success: #2fa36b;
+  --warning: #e8a23a;
+  --danger: #e5484d;
+  --info: #3b82f6;
+
+  --radius-lg: 28px;
+  --radius-md: 20px;
+  --radius-sm: 14px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 10px 30px rgba(20, 24, 33, 0.06);
+  --shadow-float: 0 12px 32px rgba(20, 24, 33, 0.14);
+
+  --font: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --nav-height: 76px;
+}

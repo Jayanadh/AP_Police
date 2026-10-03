@@ -1,0 +1,110 @@
+:host {
+  display: block;
+}
+
+.login {
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+// The scene sits on the bottom edge at full width. The strip above it is the scene's own top
+// colour, so the sky simply continues.
+.hero {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  min-height: 45dvh;
+  max-height: 60dvh;
+  overflow: hidden;
+  background: #3fa7a3;
+
+  app-fuel-flow-scene {
+    flex: 1;
+    // overlap the flat colour by a pixel so no hairline shows at the scene's edges
+    margin: -1px 0;
+  }
+
+  // The page rises over the scene's bottom edge in a soft arch, like the reference.
+  &::after {
+    content: '';
+    position: absolute;
+    right: -10%;
+    bottom: -1px;
+    left: -10%;
+    height: 44px;
+    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+    background: var(--bg);
+  }
+}
+
+.panel-inner {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 8px 16px calc(32px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+}
+
+.emblems {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  margin: 8px 0 16px;
+
+  img {
+    width: auto;
+    height: 84px;
+
+    @media (min-width: 900px) {
+      height: 96px;
+    }
+  }
+}
+
+h1 {
+  font-size: 30px;
+  letter-spacing: -0.03em;
+}
+
+.subtitle {
+  margin: 8px 0 24px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 20px;
+  text-align: left;
+}
+
+@media (min-width: 900px) {
+  .login {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+
+  // Taller than the scene: sky above it, grass below, both flat colours that match its edges.
+  .hero {
+    align-items: center;
+    min-height: calc(100dvh - 32px);
+    max-height: none;
+    margin: 16px 0 16px 16px;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(#3fa7a3 50%, #5e9e3e 50%);
+
+    &::after {
+      display: none;
+    }
+  }
+
+  .panel {
+    display: flex;
+    align-items: center;
+  }
+
+  .panel-inner {
+    padding: 32px;
+  }
+}

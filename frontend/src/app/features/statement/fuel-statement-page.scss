@@ -1,0 +1,129 @@
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px 28px;
+  margin-bottom: 20px;
+
+  app-period-picker {
+    flex: 1 1 320px;
+  }
+
+  .office {
+    flex: 0 1 280px;
+    margin: 0;
+  }
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+#summary > .card,
+.breakdowns > .card {
+  margin-bottom: 20px;
+}
+
+h2 {
+  margin-bottom: 12px;
+}
+
+.breakdowns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 20px;
+
+  @media (min-width: 1100px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.pick-office {
+  margin: 0 0 20px;
+}
+
+.fills-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 12px;
+
+  h2 {
+    margin: 0;
+  }
+
+  .vehicle-filter {
+    flex: 0 1 260px;
+    margin: 0;
+  }
+}
+
+.overdue-note {
+  margin: 0 0 12px;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.fills {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fill {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  overflow-wrap: anywhere;
+}
+
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.registration {
+  display: block;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.amount {
+  flex: none;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.duty {
+  margin: auto 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.duty-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}

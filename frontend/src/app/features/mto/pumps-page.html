@@ -1,0 +1,119 @@
+<div class="page">
+  <app-page-header title="Pumps" subtitle="Your police pumps and tie-up bunks.">
+    <button
+      type="button"
+      class="btn btn-primary"
+      aria-controls="pump-form"
+      [attr.aria-expanded]="formOpen()"
+      (click)="formOpen.set(true)"
+    >
+      <app-icon name="plus" [size]="18" />
+      Add pump
+    </button>
+  </app-page-header>
+
+  @if (formOpen()) {
+    <div id="pump-form" class="form-slot">
+      <app-pump-form (saved)="saved()" (cancelled)="formOpen.set(false)" />
+    </div>
+  }
+
+  @if (pumps.loading()) {
+    <p class="muted" role="status">Loading pumps…</p>
+  } @else if (pumps.error()) {
+    <div class="card">
+      <app-load-error [message]="pumps.error()" (retry)="pumps.load()" />
+    </div>
+  } @else if (!pumps.data()?.length) {
+    <div class="card">
+      <app-empty-state
+        icon="fuel"
+        title="No pumps yet"
+        text="Add your first police pump or tie-up bunk to get started."
+      />
+    </div>
+  } @else {
+    <div class="map-slot">
+      <app-map-view [markers]="markers()" (markerClick)="select($event)" />
+    </div>
+    <ul class="pumps">
+      @for (pump of pumps.data(); track pump.id) {
+        <li>
+          <a
+            class="card pump"
+            [id]="'pump-card-' + pump.id"
+            [class.selected]="selectedId() === pump.id"
+            [routerLink]="['/mto/pumps', pump.id]"
+          >
+            <div class="top">
+              <div>
+                <span class="name">{{ pump.name }}</span>
+                <span
+                  class="kind badge"
+                  [class.badge-info]="pump.kind === 'POLICE'"
+                  [class.badge-warning]="pump.kind === 'TIE_UP'"
+                >
+                  {{ pump.kind_label }}
+                </span>
+              </div>
+              <app-status-badge
+                [status]="pump.is_active ? 'ACTIVE' : 'PAUSED'"
+                [label]="pump.is_active ? 'Active' : 'Inactive'"
+              />
+            </div>
+            <p class="where">
+              <span>
+                <app-icon name="map-pin" [size]="16" />
+                {{ pump.address }}, {{ pump.district_name }}
+              </span>
+              <span>
+                <app-icon name="clock" [size]="16" />
+                {{ pump.opening_hours }}
+              </span>
+            </p>
+            <div class="fuels">
+              @for (fuel of pumpFuels(pump); track fuel) {
+                <span class="chip fuel">{{ fuelLabel(fuel) }}</span>
+              }
+            </div>
+            @if (pump.kind === 'POLICE' && pump.tanks.length) {
+              <div class="tanks">
+                @for (tank of pump.tanks; track tank.id) {
+                  <div class="tank">
+                    <div class="tank-head">
+                      <span class="tank-name">
+                        {{ fuelLabel(tank.fuel_type) }}
+                        @if (tank.capacity_litres === null) {
+                          <span class="hint muted">No capacity set</span>
+                        }
+                      </span>
+                      <span class="tank-stock">
+                        @if (tank.is_low) {
+                          <span class="badge badge-danger">Low</span>
+                        }
+                        {{ litres(tank.current_stock_litres) }}
+                      </span>
+                    </div>
+                    <div
+                      class="progress"
+                      [class.danger]="tank.is_low"
+                      role="meter"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                      [attr.aria-label]="fuelLabel(tank.fuel_type) + ' level'"
+                      [attr.aria-valuenow]="tankLevel(tank).toFixed(0)"
+                      [attr.aria-valuetext]="litres(tank.current_stock_litres)"
+                    >
+                      <span [style.width.%]="tankLevel(tank)"></span>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+            <p class="staff muted">{{ staffText(pump) }}</p>
+          </a>
+        </li>
+      }
+    </ul>
+  }
+</div>

@@ -1,0 +1,232 @@
+:host {
+  display: block;
+}
+
+.shell {
+  display: flex;
+  min-height: 100dvh;
+}
+
+.main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.content {
+  display: block;
+}
+
+// ----------------------------------------------------------------- brand
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.brand-mark {
+  flex: none;
+  width: auto;
+  height: 40px;
+}
+
+// --------------------------------------------------------------- top bar
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+  background: var(--bg);
+}
+
+.top-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.bell,
+.profile {
+  position: relative;
+  width: 44px;
+  height: 44px;
+}
+
+.bell-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  // the same darkened red as .btn-danger, so white text reaches 4.5:1
+  background: color-mix(in srgb, var(--danger) 85%, black);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+// ------------------------------------------------------------ bottom bar
+.bottom-nav {
+  position: fixed;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  left: 12px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  max-width: 480px;
+  height: var(--nav-height);
+  margin: 0 auto;
+  padding: 0 8px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+
+  .btn-icon {
+    width: 52px;
+    height: 52px;
+    box-shadow: none;
+  }
+
+  .btn-icon:not(.active) {
+    background: transparent;
+
+    &:hover {
+      background: var(--surface-2);
+    }
+  }
+}
+
+// ------------------------------------------------------------ More sheet
+.sheet:focus {
+  outline: none;
+}
+
+.more-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.more-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+
+  &.active {
+    background: var(--primary);
+    color: var(--on-primary);
+  }
+}
+
+// --------------------------------------------------------------- sidebar
+.sidebar {
+  display: none;
+}
+
+.side-nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.nav-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background: var(--surface-2);
+  }
+
+  &.active {
+    background: var(--primary);
+    color: var(--on-primary);
+    box-shadow: 0 8px 20px rgba(232, 176, 79, 0.3);
+  }
+}
+
+.side-user {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.side-user-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0 8px;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 900px) {
+  .sidebar {
+    position: sticky;
+    top: 16px;
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    width: 264px;
+    height: calc(100dvh - 32px);
+    margin: 16px 0 16px 16px;
+    padding: 20px 14px 14px;
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+
+    > .brand {
+      padding: 0 8px 20px;
+    }
+  }
+
+  .topbar {
+    justify-content: flex-end;
+    padding: 16px 32px 0;
+
+    .brand {
+      display: none;
+    }
+  }
+
+  .bottom-nav {
+    display: none;
+  }
+}

@@ -1,0 +1,321 @@
+// Phones: the map fills the top of the screen edge to edge, with round buttons floating on it, and the
+// sheet of pumps overlaps its bottom edge (like the reference app). From 900 px: map left, sheet right.
+:host {
+  display: block;
+}
+
+.map-area {
+  position: relative;
+
+  app-map-view {
+    --map-height: max(300px, 55dvh);
+    --map-radius: 0;
+    // The sheet covers the bottom 28 px: lift the attribution and the zoom buttons above it.
+    --map-inset-bottom: 28px;
+    --map-controls-top: auto;
+    --map-controls-bottom: 44px;
+  }
+}
+
+.map-top {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  left: 12px;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  // Drags between the buttons still reach the map.
+  pointer-events: none;
+
+  > * {
+    pointer-events: auto;
+  }
+
+  .btn-icon {
+    box-shadow: var(--shadow-float);
+  }
+}
+
+.search-field {
+  position: relative;
+  display: none;
+  flex: 1;
+  min-width: 0;
+
+  .search-open & {
+    display: block;
+  }
+
+  app-icon {
+    position: absolute;
+    top: 14px;
+    left: 16px;
+    color: var(--muted);
+  }
+
+  input {
+    width: 100%;
+    height: 48px;
+    padding: 0 16px 0 46px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    box-shadow: var(--shadow-float);
+  }
+}
+
+.panel {
+  z-index: 1;
+  min-height: calc(45dvh + 28px);
+  margin-top: -28px;
+  padding-bottom: calc(var(--nav-height) + 40px + env(safe-area-inset-bottom, 0px));
+}
+
+.title {
+  max-width: 18ch;
+  font-size: 24px;
+}
+
+.fuel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.location-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--info) 10%, white);
+  font-size: 14px;
+
+  p {
+    flex: 1 1 160px;
+  }
+}
+
+.row-icon,
+.art-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+// The sideways strip of cards bleeds to the sheet's edges and scrolls on its own, never the page.
+.carousel {
+  display: flex;
+  gap: 14px;
+  margin: 0 -20px;
+  padding: 4px 20px 18px;
+  overflow-x: auto;
+  list-style: none;
+  scroll-padding: 0 20px;
+  scroll-snap-type: x mandatory;
+
+  > li {
+    flex: none;
+    width: 196px;
+    scroll-snap-align: start;
+  }
+}
+
+.pump-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px 14px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: inherit;
+  text-decoration: none;
+}
+
+// The "photo" of a pump: a sky-teal gradient for a police pump, an amber one for a tie-up bunk.
+.art {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  height: 92px;
+  padding: 10px;
+  margin: 0 -6px 8px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(160deg, #3fa7a3 0%, #8fcdb0 55%, #f6e4b8 100%);
+
+  &.tieup {
+    background: linear-gradient(160deg, #f9c23c 0%, #f2a33a 55%, #f07a5a 100%);
+  }
+
+  .kind {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: var(--surface);
+    color: var(--text);
+  }
+}
+
+.art-icon {
+  width: 52px;
+  height: 52px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.pump-name,
+.pump-where {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pump-name {
+  font-weight: 700;
+}
+
+.pump-where {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+
+  > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+}
+
+.nearest-title {
+  margin: 8px 0 14px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.nearest {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  > li + li {
+    border-top: 1px solid var(--border);
+  }
+}
+
+.pump-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  color: inherit;
+  text-decoration: none;
+
+  &:hover .pump-name {
+    text-decoration: underline;
+  }
+}
+
+.row-icon {
+  width: 44px;
+  height: 44px;
+  background: color-mix(in srgb, var(--danger) 12%, white);
+  color: var(--danger);
+
+  &.tieup {
+    background: color-mix(in srgb, var(--primary) 22%, white);
+    color: color-mix(in srgb, var(--primary-strong) 70%, black);
+  }
+}
+
+.row-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.row-meta {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 13px;
+
+  .pump-distance {
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .pump-time {
+    color: var(--muted);
+  }
+}
+
+@media (min-width: 900px) {
+  .finder {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+    gap: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 16px 32px 48px;
+  }
+
+  .map-area {
+    position: sticky;
+    top: 76px;
+
+    app-map-view {
+      --map-height: calc(100dvh - 108px);
+      --map-radius: var(--radius-lg);
+      --map-inset-bottom: 0px;
+      --map-controls-top: 12px;
+      --map-controls-bottom: auto;
+    }
+  }
+
+  // The zoom buttons stay top right; the search box and the locate button sit left of them.
+  .map-top {
+    right: 72px;
+    justify-content: flex-start;
+  }
+
+  .search-field {
+    display: block;
+    max-width: 380px;
+  }
+
+  .search-toggle {
+    display: none;
+  }
+
+  .panel {
+    min-height: 0;
+    margin-top: 0;
+    padding: 28px 24px 24px;
+    border-radius: var(--radius-lg);
+
+    &::before {
+      display: none;
+    }
+  }
+}

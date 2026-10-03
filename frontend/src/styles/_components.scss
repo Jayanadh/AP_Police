@@ -1,0 +1,613 @@
+// Shared component classes. Markup conventions are noted next to each block.
+
+// ---------------------------------------------------------------- layout
+.page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px 16px calc(var(--nav-height) + 40px + env(safe-area-inset-bottom, 0px));
+
+  @media (min-width: 900px) {
+    padding: 32px 32px 48px;
+  }
+}
+
+.page-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+  min-width: 0;
+}
+
+.card-hero {
+  border-radius: var(--radius-lg);
+}
+
+.grid-2,
+.grid-3 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+
+  > * {
+    min-width: 0;
+  }
+}
+
+@media (min-width: 600px) {
+  .grid-2,
+  .grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  // darkened from --danger so the text reaches 4.5:1 on white and on the page background
+  color: color-mix(in srgb, var(--danger) 80%, black);
+}
+
+// --------------------------------------------------------------- buttons
+// Pill buttons: <button class="btn btn-primary">. Icons go inside as <app-icon>.
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  box-shadow: 0 8px 20px rgba(232, 176, 79, 0.35);
+
+  &:hover:not(:disabled) {
+    background: var(--primary-strong);
+  }
+}
+
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--text);
+
+  &:hover:not(:disabled) {
+    background: var(--border);
+  }
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+
+  &:hover:not(:disabled) {
+    background: var(--surface-2);
+  }
+}
+
+.btn-danger {
+  // darkened from --danger so white text reaches 4.5:1
+  background: color-mix(in srgb, var(--danger) 85%, black);
+  color: #ffffff;
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 75%, black);
+  }
+}
+
+// Round icon button (works on <button> and <a>), like the reference's nav and map buttons.
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-card);
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    transform 0.1s ease;
+
+  &:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &.active {
+    background: var(--primary);
+    color: var(--on-primary);
+  }
+}
+
+.btn-block {
+  display: flex;
+  width: 100%;
+}
+
+// Compact buttons for dense rows. Put .btn-sm on a button, or .btn-group-sm on the container of
+// a group of buttons (it also reaches the button inside <app-confirm-button>).
+.btn-sm,
+.btn-group-sm .btn {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+
+  &.active {
+    background: var(--primary);
+    color: var(--on-primary);
+  }
+}
+
+// ---------------------------------------------------------------- badges
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+@each $tone,
+  $color
+    in (
+      'success': var(--success),
+      'warning': var(--warning),
+      'danger': var(--danger),
+      'info': var(--info)
+    )
+{
+  .badge-#{$tone} {
+    background: color-mix(in srgb, #{$color} 14%, white);
+    color: color-mix(in srgb, #{$color} 60%, black);
+  }
+}
+
+.badge-muted {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+// ----------------------------------------------------------------- forms
+// <div class="field"><label for="x">Name</label><input id="x"><div class="field-error">…</div></div>
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+
+  > label,
+  > .field-label {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  // Text-like controls only: checkboxes, radios and file inputs keep their own look
+  // (see .field-inline and .file-input).
+  input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  select,
+  textarea {
+    width: 100%;
+    height: 48px;
+    padding: 0 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 15px;
+    transition: border-color 0.15s ease;
+
+    &::placeholder {
+      color: var(--muted);
+    }
+
+    &:focus {
+      border-color: var(--primary-strong);
+    }
+
+    // keep a visible focus ring (never outline: none)
+    &:focus-visible {
+      outline: 2px solid var(--primary-strong);
+      outline-offset: 1px;
+    }
+
+    &:disabled {
+      background: var(--surface-2);
+      color: var(--muted);
+    }
+
+    &.ng-invalid.ng-touched {
+      border-color: var(--danger);
+    }
+  }
+
+  textarea {
+    height: auto;
+    min-height: 96px;
+    padding: 12px 16px;
+    resize: vertical;
+  }
+
+  select {
+    appearance: none;
+    padding-right: 44px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23676E7C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    background-size: 18px;
+  }
+}
+
+.field-error {
+  color: color-mix(in srgb, var(--danger) 80%, black);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+// Checkbox or radio with its label on one row:
+// <div class="field-inline"><input type="checkbox" id="x"><label for="x">Emergency</label></div>
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  min-width: 0;
+
+  > input[type='checkbox'],
+  > input[type='radio'] {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    accent-color: var(--primary-strong);
+    cursor: pointer;
+  }
+
+  > label {
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+}
+
+// Button-like file picker. The real input stays in the page (focusable, keyboard and
+// screen-reader friendly) but is visually hidden; show the chosen name in .file-input-name:
+// <label class="file-input"><input type="file" id="x"><span class="file-input-button">Choose file</span>
+//   <span class="file-input-name">No file chosen</span></label>
+.file-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  min-width: 0;
+  cursor: pointer;
+
+  > input[type='file'] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    opacity: 0;
+  }
+
+  > input[type='file']:focus-visible + .file-input-button {
+    outline: 2px solid var(--primary-strong);
+    outline-offset: 2px;
+  }
+}
+
+.file-input-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  gap: 8px;
+  height: 48px;
+  padding: 0 24px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  transition: background-color 0.15s ease;
+
+  .file-input:hover > & {
+    background: var(--border);
+  }
+}
+
+.file-input-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+
+  > * {
+    min-width: 0;
+  }
+
+  @media (min-width: 700px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    > .full {
+      grid-column: 1 / -1;
+    }
+  }
+}
+
+// ------------------------------------------------- stats, lists, tables
+// <div class="stat"><span class="stat-icon"><app-icon …/></span><div><div class="stat-label">…</div><div class="stat-value">…</div></div></div>
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.stat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.stat-label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.stat-primary .stat-icon {
+  background: color-mix(in srgb, var(--primary) 22%, white);
+  color: var(--primary-strong);
+}
+
+.stat-warning .stat-icon {
+  background: color-mix(in srgb, var(--warning) 20%, white);
+  color: color-mix(in srgb, var(--warning) 80%, black);
+}
+
+.stat-danger .stat-icon {
+  background: color-mix(in srgb, var(--danger) 14%, white);
+  color: var(--danger);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+
+  &:first-child {
+    padding-top: 0;
+  }
+
+  &:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+}
+
+// Scrolls sideways inside its card, never the page.
+.table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+
+  th,
+  td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: middle;
+    // Rows stay on one line and the wrapper scrolls; mark a long-text cell with .wrap.
+    white-space: nowrap;
+  }
+
+  td.wrap {
+    min-width: 200px;
+    white-space: normal;
+  }
+
+  th {
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+}
+
+.progress {
+  height: 10px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+
+  > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--primary);
+    transition: width 0.3s ease;
+  }
+
+  &.warning > span {
+    background: var(--warning);
+  }
+
+  &.danger > span {
+    background: var(--danger);
+  }
+}
+
+// --------------------------------------------------- sheet and PIN digits
+// Bottom sheet: in the page flow by default (like the reference's "Found 8 petrol
+// stations" panel); add .sheet-fixed for a modal sheet pinned to the screen bottom.
+.sheet {
+  position: relative;
+  padding: 32px 20px 20px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    width: 44px;
+    height: 5px;
+    margin-left: -22px;
+    border-radius: var(--radius-pill);
+    background: var(--border);
+  }
+}
+
+.sheet-fixed {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 60;
+  width: min(100%, 560px);
+  max-height: 88vh;
+  margin: 0 auto;
+  overflow-y: auto;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(20, 24, 33, 0.4);
+}
+
+.pin {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 40px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3em;
+  text-align: center;
+  // letter-spacing trails the last digit; shift back so the digits sit centred
+  text-indent: 0.3em;
+}

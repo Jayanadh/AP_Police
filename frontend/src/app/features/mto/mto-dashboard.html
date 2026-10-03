@@ -1,0 +1,147 @@
+<div class="page">
+  <app-page-header [title]="greeting()" [subtitle]="subtitle()" />
+
+  @if (dashboard.loading()) {
+    <p class="muted" role="status">Loading the dashboard…</p>
+  } @else if (dashboard.error()) {
+    <div class="card">
+      <app-load-error [message]="dashboard.error()" (retry)="dashboard.load()" />
+    </div>
+  } @else if (dashboard.data(); as data) {
+    <div class="tiles">
+      @for (tile of tiles(); track tile.link) {
+        <a class="stat-link" [routerLink]="tile.link">
+          <app-stat-card
+            [icon]="tile.icon"
+            [label]="tile.label"
+            [value]="tile.count"
+            [tone]="tile.count > 0 ? tile.alert : 'default'"
+          />
+        </a>
+      }
+    </div>
+
+    <div class="panels">
+      <section id="fuel-card" class="card" aria-labelledby="fuel-title">
+        <h2 id="fuel-title">Fuel this month</h2>
+        @let total = usage(data.fuel.used_litres, data.fuel.limit_litres);
+        <div class="fuel-total">
+          <div class="line">
+            <span class="figure">
+              {{ litres(data.fuel.used_litres) }} of {{ litres(data.fuel.limit_litres) }}
+            </span>
+            <span class="muted">{{ total.percent }}% used</span>
+          </div>
+          <div
+            class="progress"
+            [class.warning]="total.tone === 'warning'"
+            [class.danger]="total.tone === 'danger'"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-label="Fuel used this month"
+            [attr.aria-valuenow]="total.percent"
+          >
+            <span [style.width.%]="total.percent"></span>
+          </div>
+        </div>
+
+        <h3>Top vehicles</h3>
+        @if (!data.top_vehicles.length) {
+          <p class="muted">No vehicles yet.</p>
+        } @else {
+          <ul class="rows">
+            @for (vehicle of data.top_vehicles; track vehicle.id) {
+              @let share = usage(vehicle.used_litres, vehicle.limit_litres);
+              <li class="top-vehicle">
+                <div class="line">
+                  <a class="registration" [routerLink]="['/mto/vehicles', vehicle.id]">{{
+                    vehicle.registration_number
+                  }}</a>
+                  <span class="muted">
+                    {{ litres(vehicle.used_litres) }} of {{ litres(vehicle.limit_litres) }}
+                  </span>
+                </div>
+                <div
+                  class="progress"
+                  [class.warning]="share.tone === 'warning'"
+                  [class.danger]="share.tone === 'danger'"
+                  role="progressbar"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  [attr.aria-label]="'Fuel used this month by ' + vehicle.registration_number"
+                  [attr.aria-valuenow]="share.percent"
+                >
+                  <span [style.width.%]="share.percent"></span>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
+      <div class="side">
+        <section id="stock-card" class="card" aria-labelledby="stock-title">
+          <h2 id="stock-title">Pump stock</h2>
+          @if (!data.tanks.length) {
+            <p class="muted">No police pump tanks yet.</p>
+          } @else {
+            <ul class="rows">
+              @for (tank of data.tanks; track tank.id) {
+                <li class="tank">
+                  <div class="line">
+                    <span>
+                      <strong>{{ tank.pump_name }}</strong>
+                      <span class="muted">&ngsp;{{ fuelLabel(tank.fuel_type) }}</span>
+                      @if (tank.capacity_litres === null) {
+                        <span class="hint muted">No capacity set</span>
+                      }
+                    </span>
+                    <span class="badges">
+                      @if (tank.is_low) {
+                        <span class="badge badge-danger">Low</span>
+                      }
+                      <span class="figure">{{ litres(tank.current_stock_litres) }}</span>
+                    </span>
+                  </div>
+                  <div
+                    class="progress"
+                    [class.danger]="tank.is_low"
+                    role="meter"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    [attr.aria-label]="tank.pump_name + ' ' + fuelLabel(tank.fuel_type) + ' level'"
+                    [attr.aria-valuenow]="level(tank)"
+                    [attr.aria-valuetext]="litres(tank.current_stock_litres)"
+                  >
+                    <span [style.width.%]="level(tank)"></span>
+                  </div>
+                </li>
+              }
+            </ul>
+          }
+          <a class="btn btn-secondary btn-sm more" routerLink="/mto/pumps">View pumps</a>
+        </section>
+
+        <section id="status-card" class="card" aria-labelledby="status-title">
+          <h2 id="status-title">Vehicles by status</h2>
+          <ul class="list">
+            <li class="list-row status-row">
+              <app-status-badge status="ACTIVE" />
+              <strong>{{ data.vehicles.active }}</strong>
+            </li>
+            <li class="list-row status-row">
+              <app-status-badge status="PAUSED" />
+              <strong>{{ data.vehicles.paused }}</strong>
+            </li>
+            <li class="list-row status-row">
+              <app-status-badge status="TERMINATION_PENDING" />
+              <strong>{{ data.vehicles.termination_pending }}</strong>
+            </li>
+          </ul>
+          <a class="btn btn-secondary btn-sm more" routerLink="/mto/vehicles">View vehicles</a>
+        </section>
+      </div>
+    </div>
+  }
+</div>

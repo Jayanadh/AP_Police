@@ -1,0 +1,139 @@
+<form class="card" [formGroup]="form" (ngSubmit)="save()">
+  <h2>{{ adding() ? 'Add vehicle' : 'Edit ' + vehicle()!.registration_number }}</h2>
+
+  <div class="form-grid">
+    <div class="field">
+      <label for="vehicle-registration">Registration number</label>
+      <input
+        #registrationField
+        id="vehicle-registration"
+        type="text"
+        formControlName="registration_number"
+        autocomplete="off"
+        autocapitalize="characters"
+        spellcheck="false"
+        placeholder="AP39PA1234"
+        (input)="upperCase($event)"
+      />
+    </div>
+    <div class="field">
+      <label for="vehicle-type">Type</label>
+      <select id="vehicle-type" formControlName="vehicle_type">
+        <option [ngValue]="null" disabled>Select type</option>
+        @for (type of types; track type.value) {
+          <option [ngValue]="type.value">{{ type.label }}</option>
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="vehicle-make">Make</label>
+      <input id="vehicle-make" type="text" formControlName="make" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="vehicle-model">Model</label>
+      <input id="vehicle-model" type="text" formControlName="model" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="vehicle-year">Year</label>
+      <input
+        id="vehicle-year"
+        type="number"
+        inputmode="numeric"
+        formControlName="year_of_manufacture"
+      />
+    </div>
+    <div class="field">
+      <span class="field-label" id="vehicle-fuel-label">Fuel type</span>
+      <div class="chips" role="group" aria-labelledby="vehicle-fuel-label">
+        @for (fuel of fuels; track fuel.value) {
+          <button
+            type="button"
+            class="chip"
+            [class.active]="form.controls.fuel_type.value === fuel.value"
+            [attr.aria-pressed]="form.controls.fuel_type.value === fuel.value"
+            (click)="chooseFuel(fuel.value)"
+          >
+            {{ fuel.label }}
+          </button>
+        }
+      </div>
+    </div>
+    <div class="field">
+      <label for="vehicle-tank">Tank capacity (L)</label>
+      <input
+        id="vehicle-tank"
+        type="number"
+        inputmode="decimal"
+        step="any"
+        formControlName="tank_capacity_litres"
+      />
+    </div>
+    <div class="field">
+      <label for="vehicle-limit">Monthly fuel limit (L)</label>
+      <input
+        id="vehicle-limit"
+        type="number"
+        inputmode="decimal"
+        step="any"
+        formControlName="monthly_fuel_limit_litres"
+      />
+    </div>
+    <div class="field">
+      <label for="vehicle-chassis">Chassis no.</label>
+      <input
+        id="vehicle-chassis"
+        type="text"
+        formControlName="chassis_number"
+        autocomplete="off"
+        autocapitalize="characters"
+      />
+    </div>
+    <div class="field">
+      <label for="vehicle-engine">Engine no.</label>
+      <input
+        id="vehicle-engine"
+        type="text"
+        formControlName="engine_number"
+        autocomplete="off"
+        autocapitalize="characters"
+      />
+    </div>
+    <div class="field">
+      <label for="vehicle-odometer">Odometer at onboarding (km)</label>
+      <input
+        id="vehicle-odometer"
+        type="number"
+        inputmode="numeric"
+        formControlName="odometer_at_onboarding_km"
+      />
+    </div>
+    <div class="field">
+      <label for="vehicle-service-km">Service every (km)</label>
+      <input
+        id="vehicle-service-km"
+        type="number"
+        inputmode="numeric"
+        formControlName="service_interval_km"
+      />
+    </div>
+    <div class="field">
+      <label for="vehicle-service-days">Service every (days)</label>
+      <input
+        id="vehicle-service-days"
+        type="number"
+        inputmode="numeric"
+        formControlName="service_interval_days"
+      />
+    </div>
+  </div>
+
+  @if (error()) {
+    <p class="error" role="alert">{{ error() }}</p>
+  }
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary" [disabled]="saving()">
+      {{ adding() ? 'Add vehicle' : 'Save changes' }}
+    </button>
+    <button type="button" class="btn btn-ghost" (click)="cancelled.emit()">Cancel</button>
+  </div>
+</form>

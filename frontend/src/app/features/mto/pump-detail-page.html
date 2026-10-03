@@ -1,0 +1,271 @@
+<div class="page">
+  @if (pump.loading()) {
+    <app-page-header title="Pump" backLink="/mto/pumps" />
+    <p class="muted" role="status">Loading pump…</p>
+  } @else if (pump.error()) {
+    <app-page-header title="Pump" backLink="/mto/pumps" />
+    <div class="card">
+      <app-load-error [message]="pump.error()" (retry)="loadAll()" small />
+    </div>
+  } @else if (pump.data(); as p) {
+    <app-page-header [title]="p.name" [subtitle]="p.district_name" backLink="/mto/pumps">
+      <span
+        class="kind badge"
+        [class.badge-info]="p.kind === 'POLICE'"
+        [class.badge-warning]="p.kind === 'TIE_UP'"
+      >
+        {{ p.kind_label }}
+      </span>
+      <app-status-badge
+        [status]="p.is_active ? 'ACTIVE' : 'PAUSED'"
+        [label]="p.is_active ? 'Active' : 'Inactive'"
+      />
+      <button
+        type="button"
+        class="btn btn-secondary btn-sm"
+        aria-controls="pump-form"
+        [attr.aria-expanded]="editTarget() !== null"
+        (click)="editTarget.set(p)"
+      >
+        <app-icon name="pencil" [size]="16" />
+        Edit
+      </button>
+      @if (p.is_active) {
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          [disabled]="busy()"
+          (click)="setActive(false)"
+        >
+          <app-icon name="pause" [size]="16" />
+          Deactivate
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          [disabled]="busy()"
+          (click)="setActive(true)"
+        >
+          <app-icon name="play" [size]="16" />
+          Activate
+        </button>
+      }
+    </app-page-header>
+
+    @if (editTarget(); as target) {
+      <div id="pump-form" class="form-slot">
+        <app-pump-form
+          [pump]="target"
+          (saved)="edited($event)"
+          (cancelled)="editTarget.set(null)"
+        />
+      </div>
+    }
+
+    <section id="details" class="card" aria-labelledby="details-title">
+      <h2 id="details-title">Details</h2>
+      <div class="detail-map">
+        <app-map-view [markers]="markers()" [center]="point()" [zoom]="15" />
+      </div>
+      <dl class="facts">
+        <div>
+          <dt>Address</dt>
+          <dd>{{ p.address }}</dd>
+        </div>
+        <div>
+          <dt>District</dt>
+          <dd>{{ p.district_name }}</dd>
+        </div>
+        <div>
+          <dt>Opening hours</dt>
+          <dd>{{ p.opening_hours }}</dd>
+        </div>
+        <div>
+          <dt>Fuels sold</dt>
+          <dd>
+            <span class="fuels">
+              @for (fuel of pumpFuels(p); track fuel) {
+                <span class="chip fuel">{{ fuelLabel(fuel) }}</span>
+              }
+            </span>
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    @if (p.kind === 'POLICE') {
+      <section id="tanks" aria-labelledby="tanks-title">
+        <div class="card-head">
+          <h2 id="tanks-title">Tanks</h2>
+          <div class="month" role="group" aria-label="Month of the stock entries">
+            <button
+              type="button"
+              class="btn-icon"
+              aria-label="Previous month"
+              (click)="moveMonth(-1)"
+            >
+              <app-icon name="chevron-left" [size]="20" />
+            </button>
+            <span class="month-label" aria-live="polite">{{ monthLabel(month()) }}</span>
+            <button
+              type="button"
+              class="btn-icon"
+              aria-label="Next month"
+              [disabled]="thisMonth()"
+              (click)="moveMonth(1)"
+            >
+              <app-icon name="chevron-right" [size]="20" />
+            </button>
+          </div>
+        </div>
+        <div class="tanks">
+          @for (tank of p.tanks; track tank.id) {
+            <app-pump-tank-card [tank]="tank" [month]="month()" (changed)="tankChanged($event)" />
+          } @empty {
+            <p class="muted">This pump has no tanks.</p>
+          }
+        </div>
+      </section>
+    }
+
+    <section id="staff" class="card" aria-labelledby="staff-title">
+      <h2 id="staff-title">Staff</h2>
+      @if (staff.error()) {
+        <app-load-error [message]="staff.error()" (retry)="staff.load()" small />
+      } @else if (staff.loading()) {
+        <p class="muted" role="status">Loading staff…</p>
+      } @else if (!staff.data()?.length) {
+        <p class="muted no-staff">No staff logins yet.</p>
+      } @else {
+        <ul class="list">
+          @for (person of staff.data(); track person.id) {
+            <li class="list-row staff-row">
+              <div class="staff-main">
+                <span class="staff-name">{{ person.full_name }}</span>
+                <span class="staff-login muted">Login ID {{ person.username }}</span>
+              </div>
+              <app-status-badge [status]="person.status" [label]="person.status_label" />
+              @if (inService(person)) {
+                <div class="staff-actions btn-group-sm">
+                  @if (person.status === 'ACTIVE') {
+                    <button
+                      type="button"
+                      class="btn btn-secondary"
+                      [disabled]="busyId() === person.id"
+                      (click)="act(person, 'pause')"
+                    >
+                      Pause
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      class="btn btn-secondary"
+                      [disabled]="busyId() === person.id"
+                      (click)="act(person, 'resume')"
+                    >
+                      Resume
+                    </button>
+                  }
+                  <app-confirm-button label="Terminate" (confirmed)="act(person, 'terminate')" />
+                  <button type="button" class="btn btn-ghost" (click)="openReset(person)">
+                    Reset password
+                  </button>
+                </div>
+                @if (resetFor() === person.id) {
+                  <form class="reset" (submit)="submitReset($event, person)">
+                    <div class="field">
+                      <label [for]="'staff-reset-' + person.id" class="sr-only">
+                        New password for {{ person.full_name }}
+                      </label>
+                      <input
+                        #password
+                        [id]="'staff-reset-' + person.id"
+                        type="password"
+                        placeholder="New password"
+                        autocomplete="new-password"
+                        [value]="resetValue()"
+                        (input)="resetValue.set(password.value)"
+                      />
+                    </div>
+                    @if (resetError()) {
+                      <p class="error" role="alert">{{ resetError() }}</p>
+                    }
+                    <div class="reset-actions btn-group-sm">
+                      <button
+                        type="submit"
+                        class="btn btn-primary"
+                        [disabled]="busyId() === person.id"
+                      >
+                        Set password
+                      </button>
+                      <button type="button" class="btn btn-ghost" (click)="closeReset()">
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                }
+              }
+            </li>
+          }
+        </ul>
+      }
+
+      <form class="add-staff" [formGroup]="staffForm" (ngSubmit)="addStaff()">
+        <h3>Add staff login</h3>
+        <div class="form-grid">
+          <div class="field">
+            <label for="staff-username">Login ID</label>
+            <input
+              id="staff-username"
+              type="text"
+              formControlName="username"
+              autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
+            />
+          </div>
+          <div class="field">
+            <label for="staff-name">Name</label>
+            <input id="staff-name" type="text" formControlName="full_name" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="staff-mobile">Mobile</label>
+            <input
+              id="staff-mobile"
+              type="tel"
+              inputmode="numeric"
+              maxlength="10"
+              formControlName="mobile"
+              autocomplete="off"
+            />
+          </div>
+          <div class="field">
+            <label for="staff-emp">Emp ID (optional)</label>
+            <input
+              id="staff-emp"
+              type="text"
+              formControlName="emp_id"
+              autocomplete="off"
+              autocapitalize="characters"
+            />
+          </div>
+          <div class="field">
+            <label for="staff-password">First password</label>
+            <input
+              id="staff-password"
+              type="password"
+              formControlName="password"
+              autocomplete="new-password"
+            />
+            <p class="muted">They will be asked to change it when they first log in.</p>
+          </div>
+        </div>
+        @if (addError()) {
+          <p class="error" role="alert">{{ addError() }}</p>
+        }
+        <button type="submit" class="btn btn-primary" [disabled]="adding()">Add staff login</button>
+      </form>
+    </section>
+  }
+</div>
