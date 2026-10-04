@@ -1,4 +1,8 @@
-"""A police pump's stock ledger. Every change to a tank's stock goes through here, so each one leaves an entry."""
+"""A police pump's stock ledger. Every change to a tank's stock goes through here, so each one leaves an entry.
+
+The MTO sets each tank's opening stock once, when the pump starts using the system. After that the stock is never
+measured or set again: tanker receipts add to it and fills take from it.
+"""
 from decimal import Decimal
 
 from django.db import transaction
@@ -23,14 +27,19 @@ def low_tanks(tanks: QuerySet[PumpTank]) -> QuerySet[PumpTank]:
     return tanks.filter(current_stock_litres__lt=F("low_stock_threshold_litres"))
 
 
-def record_measurement(tank: PumpTank, litres, by: User, note: str = "") -> StockEntry:
-    """The morning measurement: the stock becomes exactly the measured value."""
+def record_opening(tank: PumpTank, litres, by: User, note: str = "") -> StockEntry:
+    """The stock a tank holds when the pump starts using the system, set once by the MTO. From then on the stock
+    moves only with tanker receipts and fills: it is never measured or set again."""
     litres = _litres(litres)
     if litres < 0:
         raise BusinessRuleError("Stock can't be negative.")
     with transaction.atomic():
         locked = _lock(tank)
-        return _post(tank, locked, StockEntryKind.MEASUREMENT, litres, litres, by, note)
+        if locked.entries.exists():
+            raise BusinessRuleError(
+                "This tank's opening stock is already set. Its stock now changes only with tanker receipts and fills."
+            )
+        return _post(tank, locked, StockEntryKind.OPENING, litres, litres, by, note)
 
 
 def record_receipt(tank: PumpTank, litres, by: User, note: str = "") -> StockEntry:
@@ -61,10 +70,7 @@ def shortfall(tank: PumpTank, litres) -> str | None:
     """Why the tank cannot give `litres` now, or None when its stock covers them."""
     if litres <= tank.current_stock_litres:
         return None
-    return (
-        f"Only {tank.current_stock_litres:.2f} L of {tank.fuel_type.lower()} in stock. "
-        "Record a fresh morning measurement if this is wrong."
-    )
+    return f"Only {tank.current_stock_litres:.2f} L of {tank.fuel_type.lower()} in stock."
 
 
 def update_levels(tank: PumpTank, **changes) -> None:

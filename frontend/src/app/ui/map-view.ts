@@ -12,17 +12,20 @@ import {
   ViewEncapsulation,
 } from '@angular/core';
 import type {
+  FitBoundsOptions,
   LayerGroup,
   LeafletKeyboardEvent,
   LeafletMouseEvent,
   Map as LeafletMap,
   Marker,
+  Polyline,
 } from 'leaflet';
 import { LatLng, roundCoordinate } from '../core/geo';
 import { Icon, iconSvg } from './icon';
 import { LeafletLib, LeafletLoader } from './leaflet-loader';
 
-export type MapTone = 'police' | 'tieup' | 'me' | 'selected';
+export type MapTone =
+  'police' | 'tieup' | 'me' | 'selected' | 'vehicle' | 'vehicle-stale' | 'vehicle-tracked';
 
 export type MapMarker = {
   id: number;
@@ -30,8 +33,21 @@ export type MapMarker = {
   lng: number;
   /** Names the marker for people using a keyboard or a screen reader, and shows as its tooltip. */
   label: string;
-  /** Police pump (red) by default; a tie-up bunk is amber, "me" a blue dot, "selected" the highlighted pump. */
+  /**
+   * Police pump (red) by default; a tie-up bunk is amber, "me" a blue dot, "selected" the highlighted pump. A
+   * vehicle on duty is a car pin: "vehicle-stale" when its location is old, "vehicle-tracked" the one followed.
+   */
   tone?: MapTone;
+  /** A short name written under the pin, such as a registration number. */
+  caption?: string;
+};
+
+/** A line on the map, such as the route a vehicle took. */
+export type MapPath = {
+  id: number;
+  points: LatLng[];
+  /** A vehicle's route by default; "tracked" is the route of the vehicle being followed, drawn bolder. */
+  tone?: 'route' | 'tracked';
 };
 
 const TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -44,19 +60,70 @@ const ANDHRA_PRADESH_ZOOM = 6;
 /** The closest the map zooms when it fits its markers, so one pump does not fill the screen with a street. */
 const FIT_MAX_ZOOM = 15;
 
-/** Pin sizes in px: a pump's pin, the highlighted pump, and the blue dot for "me". */
-const SIZES: Readonly<Record<MapTone, number>> = { police: 36, tieup: 36, selected: 44, me: 22 };
+/**
+ * Room left around fitted markers, in px: more on the right, where the buttons are, and below, for the captions
+ * under the pins.
+ */
+const FIT_PADDING: FitBoundsOptions = { paddingTopLeft: [40, 40], paddingBottomRight: [72, 48] };
 
-/** The highlighted pump and "me" are drawn above the other pins. */
+/** How close the map comes, at least, when it starts to follow a marker: close enough to see the streets. */
+const FOLLOW_MIN_ZOOM = 15;
+
+/** Pin sizes in px: a pump's pin, the highlighted pump, the blue dot for "me", and vehicles. */
+const SIZES: Readonly<Record<MapTone, number>> = {
+  police: 36,
+  tieup: 36,
+  selected: 44,
+  me: 22,
+  vehicle: 36,
+  'vehicle-stale': 32,
+  'vehicle-tracked': 44,
+};
+
+/** The highlighted pump, the followed vehicle and "me" are drawn above the other pins; old locations below. */
 const Z_OFFSETS: Readonly<Record<MapTone, number>> = {
   police: 0,
   tieup: 0,
   selected: 1000,
   me: 500,
+  vehicle: 200,
+  'vehicle-stale': 100,
+  'vehicle-tracked': 1000,
+};
+
+/** The icon inside each kind of pin; the "me" dot has none. */
+const PIN_ICONS: Readonly<Record<MapTone, string>> = {
+  police: 'fuel',
+  tieup: 'fuel',
+  selected: 'fuel',
+  me: '',
+  vehicle: 'car',
+  'vehicle-stale': 'car',
+  'vehicle-tracked': 'car',
 };
 
 /** A marker on the map, with what it was last drawn from, so it is changed only when that changes. */
 type Pin = { marker: Marker; key: string };
+
+/** A line on the map with the white outline under it, kept the same way. */
+type Line = { outline: Polyline; line: Polyline; tone: string; key: string };
+
+/** Route colours stand out from OpenStreetMap's own: a strong blue on a white outline, never the orange of roads. */
+const ROUTE_BLUE = '#2563eb';
+const TRACKED_BLUE = '#1d4ed8';
+
+const HTML_ESCAPES: Readonly<Record<string, string>> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+/** Text made safe to place inside the HTML of a pin. */
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
+}
 
 /**
  * A map of pump pins on OpenStreetMap tiles. Leaflet loads on first use; if it cannot, the box shows a
@@ -212,6 +279,53 @@ type Pin = { marker: Marker; key: string };
       box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.22);
     }
 
+    // Vehicles on duty: a car in blue, apart from the red and amber pumps; dimmed and dashed when the location
+    // is old; filled when followed.
+    .map-pin-vehicle {
+      color: #1d4ed8;
+    }
+
+    .map-pin-vehicle-stale {
+      border-style: dashed;
+      color: var(--muted);
+      box-shadow: 0 4px 10px rgba(20, 24, 33, 0.18);
+    }
+
+    .map-pin-vehicle-tracked {
+      border-color: #ffffff;
+      background: #1d4ed8;
+      color: #ffffff;
+      box-shadow:
+        0 0 0 6px rgba(29, 78, 216, 0.25),
+        0 6px 16px rgba(20, 24, 33, 0.28);
+    }
+
+    .map-pin-caption {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.96);
+      color: #1d2433;
+      font: 700 11px/1.3 var(--font);
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      box-shadow: 0 2px 6px rgba(20, 24, 33, 0.22);
+      pointer-events: none;
+    }
+
+    // Routes: no fill, and the outline a little see-through so the streets under it still read.
+    .map-view .map-path,
+    .map-view .map-path-outline {
+      fill: none;
+    }
+
+    .map-view .map-path-outline {
+      stroke-opacity: 0.85;
+    }
+
     .leaflet-marker-icon:hover .map-pin,
     .leaflet-marker-icon:focus-visible .map-pin {
       transform: scale(1.08);
@@ -239,6 +353,15 @@ export class MapView {
    * buttons still work). Set this for a full-screen map, where there is no page to scroll.
    */
   readonly touchDrag = input(false);
+  /** Lines drawn under the pins, such as the routes vehicles took. */
+  readonly paths = input<MapPath[]>([]);
+  /**
+   * The markers move on their own (vehicles on duty): the map fits them again when one comes or goes, not each
+   * time one moves, so it stays where the person looking has put it.
+   */
+  readonly live = input(false);
+  /** The id of a marker to keep in view: the map centres on it once, then pans along as it moves. */
+  readonly follow = input<number | null>(null);
 
   readonly markerClick = output<number>();
   readonly mapClick = output<LatLng>();
@@ -252,12 +375,17 @@ export class MapView {
   private lib: LeafletLib | null = null;
   private map: LeafletMap | null = null;
   private layer: LayerGroup | null = null;
+  private pathLayer: LayerGroup | null = null;
   /** The markers on the map by id, so an update changes them in place and keeps keyboard focus. */
   private readonly pins = new Map<number, Pin>();
+  /** The lines on the map by id, so a growing route is redrawn in place. */
+  private readonly lines = new Map<number, Line>();
   private observer: ResizeObserver | null = null;
   private destroyed = false;
   /** What the view was last pointed at, so a change of markers alone does not move it again. */
   private viewKey = '';
+  /** Where the followed marker was when the view last moved with it. */
+  private followedAt = '';
 
   constructor() {
     afterNextRender(() => void this.start());
@@ -265,6 +393,12 @@ export class MapView {
       const markers = this.markers();
       if (this.ready()) {
         this.draw(markers);
+      }
+    });
+    effect(() => {
+      const paths = this.paths();
+      if (this.ready()) {
+        this.drawPaths(paths);
       }
     });
     effect(() => {
@@ -303,6 +437,7 @@ export class MapView {
       this.lib = lib;
       this.map = map;
       lib.tileLayer(TILES, { maxZoom: 19, attribution: ATTRIBUTION }).addTo(map);
+      this.pathLayer = lib.layerGroup().addTo(map);
       this.layer = lib.layerGroup().addTo(map);
       map.on('click', (event: LeafletMouseEvent) => {
         if (this.pickable()) {
@@ -330,8 +465,10 @@ export class MapView {
     this.map?.remove();
     this.map = null;
     this.layer = null;
+    this.pathLayer = null;
     this.lib = null;
     this.pins.clear();
+    this.lines.clear();
   }
 
   /** Brings the markers on the map in line with the input: new ones are added, changed ones updated in place, gone ones removed. */
@@ -344,11 +481,12 @@ export class MapView {
     for (const item of markers) {
       present.add(item.id);
       const tone = item.tone ?? 'police';
-      const key = `${tone}|${item.label}|${item.lat}|${item.lng}`;
+      const caption = item.caption ?? '';
+      const key = `${tone}|${item.label}|${caption}|${item.lat}|${item.lng}`;
       const pin = this.pins.get(item.id);
       if (!pin) {
         const marker = lib.marker([item.lat, item.lng], {
-          icon: this.icon(lib, tone),
+          icon: this.icon(lib, tone, caption),
           title: item.label,
           keyboard: true,
           zIndexOffset: Z_OFFSETS[tone],
@@ -363,7 +501,7 @@ export class MapView {
         pin.marker.getElement()?.setAttribute('title', item.label);
         pin.marker.setLatLng([item.lat, item.lng]);
         pin.marker.setZIndexOffset(Z_OFFSETS[tone]);
-        pin.marker.setIcon(this.icon(lib, tone));
+        pin.marker.setIcon(this.icon(lib, tone, caption));
         pin.key = key;
       }
     }
@@ -375,11 +513,66 @@ export class MapView {
     }
   }
 
-  private icon(lib: LeafletLib, tone: MapTone) {
+  /** Brings the lines on the map in line with the input, the same way as the markers. */
+  private drawPaths(paths: MapPath[]): void {
+    const { lib, pathLayer } = this;
+    if (!lib || !pathLayer) {
+      return;
+    }
+    const present = new Set<number>();
+    for (const path of paths) {
+      present.add(path.id);
+      const tone = path.tone ?? 'route';
+      const latlngs = path.points.map((point): [number, number] => [point.lat, point.lng]);
+      const [first, last] = [latlngs[0], latlngs.at(-1)];
+      const key = `${latlngs.length}|${first}|${last}`;
+      const drawn = this.lines.get(path.id);
+      if (drawn && drawn.tone === tone) {
+        if (drawn.key !== key) {
+          drawn.outline.setLatLngs(latlngs);
+          drawn.line.setLatLngs(latlngs);
+          drawn.key = key;
+        }
+        continue;
+      }
+      if (drawn) {
+        // Leaflet gives a line its class and colour only when it makes it, so a new tone means new lines.
+        pathLayer.removeLayer(drawn.outline);
+        pathLayer.removeLayer(drawn.line);
+      }
+      const weight = tone === 'tracked' ? 6 : 5;
+      const shape = { interactive: false, lineCap: 'round', lineJoin: 'round' } as const;
+      const outline = lib.polyline(latlngs, {
+        ...shape,
+        className: 'map-path-outline',
+        color: '#ffffff',
+        weight: weight + 4,
+      });
+      const line = lib.polyline(latlngs, {
+        ...shape,
+        className: `map-path map-path-${tone}`,
+        color: tone === 'tracked' ? TRACKED_BLUE : ROUTE_BLUE,
+        weight,
+        opacity: 0.95,
+      });
+      pathLayer.addLayer(outline); // first, so it lies under the line
+      pathLayer.addLayer(line);
+      this.lines.set(path.id, { outline, line, tone, key });
+    }
+    for (const [id, drawn] of this.lines) {
+      if (!present.has(id)) {
+        pathLayer.removeLayer(drawn.outline);
+        pathLayer.removeLayer(drawn.line);
+        this.lines.delete(id);
+      }
+    }
+  }
+
+  private icon(lib: LeafletLib, tone: MapTone, caption: string) {
     const size = SIZES[tone];
     return lib.divIcon({
       className: 'map-pin-wrap',
-      html: this.pinHtml(tone),
+      html: this.pinHtml(tone, caption),
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
     });
@@ -394,18 +587,26 @@ export class MapView {
     }
   }
 
-  private pinHtml(tone: MapTone): string {
-    const icon = tone === 'me' ? '' : iconSvg('fuel', tone === 'selected' ? 22 : 18);
-    return `<span class="map-pin map-pin-${tone}">${icon}</span>`;
+  private pinHtml(tone: MapTone, caption: string): string {
+    const large = tone === 'selected' || tone === 'vehicle-tracked';
+    const icon = PIN_ICONS[tone] ? iconSvg(PIN_ICONS[tone], large ? 22 : 18) : '';
+    const label = caption ? `<span class="map-pin-caption">${escapeHtml(caption)}</span>` : '';
+    return `<span class="map-pin map-pin-${tone}">${icon}</span>${label}`;
   }
 
-  /** Points the map at the centre, or fits the markers; does nothing if it already looks there. */
+  /**
+   * Points the map at the centre, or at the followed marker, or fits the markers; does nothing if it already
+   * looks there.
+   */
   private applyView(force = false): void {
     const map = this.map;
     if (!map) {
       return;
     }
     const center = this.center();
+    const markers = this.markers();
+    const follow = this.follow();
+    const followed = follow === null ? undefined : markers.find((m) => m.id === follow);
     let key: string;
     if (center) {
       const zoom = this.zoom();
@@ -413,14 +614,28 @@ export class MapView {
       if (force || key !== this.viewKey) {
         map.setView([center.lat, center.lng], zoom);
       }
+    } else if (followed) {
+      key = `follow:${followed.id}`;
+      const at = `${followed.lat},${followed.lng}`;
+      if (force || key !== this.viewKey) {
+        const zoom = map.getZoom();
+        map.setView(
+          [followed.lat, followed.lng],
+          Math.max(Number.isFinite(zoom) ? zoom : 0, FOLLOW_MIN_ZOOM),
+        );
+      } else if (at !== this.followedAt) {
+        map.panTo([followed.lat, followed.lng]); // keeps whatever zoom the person chose
+      }
+      this.followedAt = at;
     } else {
-      const markers = this.markers();
       if (markers.length > 0) {
-        key = 'fit:' + markers.map((m) => `${m.id}:${m.lat},${m.lng}`).join('|');
+        const live = this.live();
+        key =
+          'fit:' + markers.map((m) => (live ? `${m.id}` : `${m.id}:${m.lat},${m.lng}`)).join('|');
         if (force || key !== this.viewKey) {
           map.fitBounds(
             markers.map((m): [number, number] => [m.lat, m.lng]),
-            { padding: [40, 40], maxZoom: FIT_MAX_ZOOM },
+            { ...FIT_PADDING, maxZoom: FIT_MAX_ZOOM },
           );
         }
       } else {

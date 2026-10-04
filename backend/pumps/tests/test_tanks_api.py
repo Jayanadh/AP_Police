@@ -1,10 +1,12 @@
 from datetime import datetime
 from decimal import Decimal
+from io import BytesIO
 
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+from openpyxl import load_workbook
 
 from fleet.models import FuelType
 from notifications.models import Notification
@@ -66,7 +68,7 @@ def test_staff_list_the_tanks_of_their_own_pump(staff_api, pump):
     row = rows[1]
     assert set(row) == {
         "id", "pump", "pump_name", "fuel_type", "current_stock_litres", "low_stock_threshold_litres",
-        "capacity_litres", "is_low", "last_measured_at",
+        "capacity_litres", "is_low", "opening_set",
     }
     assert row["pump"] == pump.id
     assert row["pump_name"] == pump.name
@@ -74,25 +76,16 @@ def test_staff_list_the_tanks_of_their_own_pump(staff_api, pump):
     assert row["low_stock_threshold_litres"] == "100.00"
     assert row["capacity_litres"] is None
     assert row["is_low"] is False
-    assert row["last_measured_at"] is None
+    assert row["opening_set"] is False  # nothing has been recorded for the tank yet
 
 
-def test_tank_ordering_is_deterministic_despite_max_annotation(mto_api, mto):
-    """Regression test: tank ordering must be deterministic even with Max() annotation.
+def test_the_tanks_come_pump_by_pump_in_a_fixed_order(mto_api, mto):
+    first, second = police_pump(mto.unit), police_pump(mto.unit)
 
-    Creates multiple pumps with tanks and verifies consistent ordering.
-    """
-    pump1 = police_pump(mto.unit)
-    pump2 = police_pump(mto.unit)
+    rows = mto_api.get("/api/tanks/").json()
 
-    # List tanks multiple times and verify consistent ordering
-    responses = [mto_api.get("/api/tanks/").json() for _ in range(3)]
-
-    # All responses should have tanks in the same order
-    first_order = [(row["pump"], row["fuel_type"]) for row in responses[0]]
-    for response in responses[1:]:
-        current_order = [(row["pump"], row["fuel_type"]) for row in response]
-        assert current_order == first_order, "Tank ordering must be deterministic across multiple requests"
+    expected = [(pump.id, tank.id) for pump in (first, second) for tank in pump.tanks.order_by("id")]
+    assert [(row["pump"], row["id"]) for row in rows] == expected
 
 
 def test_the_mto_lists_the_tanks_of_all_the_pumps_of_their_unit(mto_api, mto, pump):
@@ -113,17 +106,18 @@ def test_staff_of_a_tie_up_bunk_see_no_tanks(api, mto):
     assert response.json() == []
 
 
-def test_a_pump_switched_to_a_bunk_no_longer_shows_its_old_tanks(staff_api, mto_api, pump):
+def test_a_pump_switched_to_a_bunk_no_longer_shows_its_old_tanks(api, mto, staff, pump):
     Pump.objects.filter(pk=pump.pk).update(kind=PumpKind.TIE_UP)  # the tanks stay in the database, as history
     assert pump.tanks.count() == 2
-    assert staff_api.get("/api/tanks/").json() == []
-    assert mto_api.get("/api/tanks/").json() == []
+    for person in (staff, mto):
+        api.force_login(person)
+        assert api.get("/api/tanks/").json() == []
 
 
 def test_staff_cannot_open_a_tank_of_another_pump(staff_api, mto):
     other = police_pump(mto.unit).tanks.first()
     assert staff_api.get(f"/api/tanks/{other.id}/").status_code == 404
-    assert staff_api.post(f"/api/tanks/{other.id}/measure/", {"litres": "10"}).status_code == 404
+    assert staff_api.post(f"/api/tanks/{other.id}/receive/", {"litres": "10"}).status_code == 404
 
 
 def test_another_units_tank_is_a_404_for_the_mto(mto_api):
@@ -145,77 +139,96 @@ def test_login_is_required(api, diesel):
     assert api.get("/api/tanks/").status_code in (401, 403)
 
 
-def test_staff_record_a_morning_measurement(staff_api, staff, diesel):
-    response = staff_api.post(f"/api/tanks/{diesel.id}/measure/", {"litres": "280.50", "note": "Dip stick"})
+def test_the_mto_sets_a_tanks_opening_stock(mto_api, mto, diesel):
+    response = mto_api.post(f"/api/tanks/{diesel.id}/opening/", {"litres": "280.50", "note": "Dip stick"})
 
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == diesel.id
     assert body["current_stock_litres"] == "280.50"
-    assert body["last_measured_at"] is not None
+    assert body["opening_set"] is True
     entry = StockEntry.objects.get()
     assert (entry.kind, entry.litres, entry.stock_before, entry.stock_after) == (
-        StockEntryKind.MEASUREMENT, Decimal("280.50"), Decimal("300"), Decimal("280.50"),
+        StockEntryKind.OPENING, Decimal("280.50"), Decimal("300"), Decimal("280.50"),
     )
     assert entry.note == "Dip stick"
-    assert entry.recorded_by == staff
+    assert entry.recorded_by == mto
+
+
+def test_the_opening_stock_cannot_be_set_after_a_receipt(api, mto, staff, diesel):
+    api.force_login(staff)
+    api.post(f"/api/tanks/{diesel.id}/receive/", {"litres": "100"})
+    api.force_login(mto)
+
+    response = api.post(f"/api/tanks/{diesel.id}/opening/", {"litres": "50"})
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "This tank's opening stock is already set. Its stock now changes only with tanker receipts and fills."
+    }
+    diesel.refresh_from_db()
+    assert diesel.current_stock_litres == Decimal("400")
 
 
 def test_staff_record_a_tanker_receipt(staff_api, diesel):
     response = staff_api.post(f"/api/tanks/{diesel.id}/receive/", {"litres": "1000"})
 
     assert response.status_code == 200
-    assert response.json()["current_stock_litres"] == "1300.00"
+    body = response.json()
+    assert body["current_stock_litres"] == "1300.00"
+    assert body["opening_set"] is True
     entry = StockEntry.objects.get()
     assert entry.kind == StockEntryKind.TANKER_RECEIPT
     assert entry.note == ""
 
 
-def test_the_mto_cannot_measure_or_receive(mto_api, diesel):
-    assert mto_api.post(f"/api/tanks/{diesel.id}/measure/", {"litres": "10"}).status_code == 403
-    assert mto_api.post(f"/api/tanks/{diesel.id}/receive/", {"litres": "10"}).status_code == 403
+def test_only_the_mto_sets_the_opening_stock_and_only_staff_record_receipts(api, mto, staff, diesel):
+    api.force_login(staff)
+    assert api.post(f"/api/tanks/{diesel.id}/opening/", {"litres": "10"}).status_code == 403
+    api.force_login(mto)
+    assert api.post(f"/api/tanks/{diesel.id}/receive/", {"litres": "10"}).status_code == 403
     diesel.refresh_from_db()
     assert diesel.current_stock_litres == Decimal("300")
     assert StockEntry.objects.count() == 0
 
 
-def test_last_measured_at_is_the_newest_measurement_not_a_receipt(staff_api, staff, diesel):
-    staff_api.post(f"/api/tanks/{diesel.id}/measure/", {"litres": "280"})
-    measured_at = StockEntry.objects.get().recorded_at
-    staff_api.post(f"/api/tanks/{diesel.id}/receive/", {"litres": "100"})
-
-    body = staff_api.get(f"/api/tanks/{diesel.id}/").json()
-
-    assert datetime.fromisoformat(body["last_measured_at"]) == measured_at
-    assert body["current_stock_litres"] == "380.00"
+def test_there_is_no_daily_measurement_any_more(api, mto, staff, diesel):
+    for person in (staff, mto):
+        api.force_login(person)
+        assert api.post(f"/api/tanks/{diesel.id}/measure/", {"litres": "10"}).status_code == 404
 
 
-@pytest.mark.parametrize(
-    "action, litres, message",
-    [
-        ("measure", "-1", "Stock can't be negative."),
-        ("receive", "0", "Enter the litres received."),
-    ],
-)
-def test_business_rule_refusals_are_400s(staff_api, diesel, action, litres, message):
-    response = staff_api.post(f"/api/tanks/{diesel.id}/{action}/", {"litres": litres})
+def test_another_units_mto_cannot_set_the_opening_stock(api, diesel):
+    api.force_login(MTOFactory())
+    assert api.post(f"/api/tanks/{diesel.id}/opening/", {"litres": "10"}).status_code == 404
+
+
+def test_a_negative_opening_stock_is_a_400(mto_api, diesel):
+    response = mto_api.post(f"/api/tanks/{diesel.id}/opening/", {"litres": "-1"})
     assert response.status_code == 400
-    assert response.json() == {"detail": message}
+    assert response.json() == {"detail": "Stock can't be negative."}
 
 
-@pytest.mark.parametrize("action", ["measure", "receive"])
+def test_an_empty_receipt_is_a_400(staff_api, diesel):
+    response = staff_api.post(f"/api/tanks/{diesel.id}/receive/", {"litres": "0"})
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Enter the litres received."}
+
+
+@pytest.mark.parametrize("who, action", [("mto", "opening"), ("staff", "receive")])
 @pytest.mark.parametrize("payload", [{}, {"litres": ""}, {"litres": "abc"}, {"litres": "1.234"}])
-def test_litres_must_be_a_number_with_two_decimals(staff_api, diesel, action, payload):
-    response = staff_api.post(f"/api/tanks/{diesel.id}/{action}/", payload)
+def test_litres_must_be_a_number_with_two_decimals(api, mto, staff, diesel, who, action, payload):
+    api.force_login(mto if who == "mto" else staff)
+    response = api.post(f"/api/tanks/{diesel.id}/{action}/", payload)
     assert response.status_code == 400
     assert "litres" in response.json()
     assert StockEntry.objects.count() == 0
 
 
-def test_a_measurement_below_the_alert_level_alerts_the_mto(staff_api, mto, diesel):
-    staff_api.post(f"/api/tanks/{diesel.id}/measure/", {"litres": "80"})
+def test_an_opening_stock_below_the_alert_level_alerts_the_mto(mto_api, mto, diesel):
+    mto_api.post(f"/api/tanks/{diesel.id}/opening/", {"litres": "80"})
 
-    body = staff_api.get(f"/api/tanks/{diesel.id}/").json()
+    body = mto_api.get(f"/api/tanks/{diesel.id}/").json()
     assert body["is_low"] is True
     assert Notification.objects.filter(recipient=mto, link=f"/mto/pumps/{diesel.pump_id}").count() == 1
 
@@ -224,7 +237,7 @@ def test_the_entries_of_a_month_are_listed_newest_first(staff_api, staff, diesel
     january = timezone.now().replace(year=2026, month=1, day=15, hour=10)
     february_early = timezone.now().replace(year=2026, month=2, day=3, hour=9)
     february_late = timezone.now().replace(year=2026, month=2, day=20, hour=9)
-    first = stock.record_measurement(diesel, Decimal("280"), staff)
+    first = stock.record_opening(diesel, Decimal("280"), staff)
     second = stock.record_receipt(diesel, Decimal("20"), staff, note="Tanker")
     third = stock.dispense(diesel, Decimal("30"), staff)
     StockEntry.objects.filter(pk=first.pk).update(recorded_at=january)
@@ -250,7 +263,7 @@ def test_the_entries_of_a_month_are_listed_newest_first(staff_api, staff, diesel
 
 
 def test_entries_use_asia_kolkata_month_boundaries(staff_api, staff, diesel):
-    entry = stock.record_measurement(diesel, Decimal("280"), staff)
+    entry = stock.record_opening(diesel, Decimal("280"), staff)
     # 20:00 UTC on 30 September is 01:30 on 1 October in Kolkata.
     StockEntry.objects.filter(pk=entry.pk).update(recorded_at="2026-09-30T20:00:00+00:00")
 
@@ -262,7 +275,7 @@ def test_entries_use_asia_kolkata_month_boundaries(staff_api, staff, diesel):
 
 
 def test_entries_default_to_the_current_month(staff_api, staff, diesel):
-    entry = stock.record_measurement(diesel, Decimal("280"), staff)
+    entry = stock.record_opening(diesel, Decimal("280"), staff)
     old = stock.record_receipt(diesel, Decimal("5"), staff)
     StockEntry.objects.filter(pk=old.pk).update(recorded_at="2020-01-10T10:00:00+00:00")
 
@@ -278,8 +291,55 @@ def test_entries_refuse_a_bad_month(staff_api, diesel, month):
     assert response.json() == {"detail": "Use the month format YYYY-MM."}
 
 
+def test_the_entries_of_any_period_are_listed(staff_api, staff, diesel):
+    receipts = [stock.record_receipt(diesel, Decimal(n), staff) for n in ("5", "6", "7")]
+    for entry, day in zip(receipts, ("2026-04-01", "2026-09-30", "2027-03-31")):
+        StockEntry.objects.filter(pk=entry.pk).update(recorded_at=f"{day}T10:00:00+05:30")
+
+    year = staff_api.get(f"/api/tanks/{diesel.id}/entries/", {"from": "2026-04-01", "to": "2026-09-30"}).json()
+
+    assert [row["id"] for row in year] == [receipts[1].id, receipts[0].id]
+
+
+def test_a_bad_period_is_refused(staff_api, diesel):
+    response = staff_api.get(f"/api/tanks/{diesel.id}/entries/", {"from": "2026-04-01", "to": "2027-05-01"})
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Pick a period of at most a year."}
+
+
+def test_pump_staff_download_the_stock_entries_of_a_period_as_excel(staff_api, staff, pump, diesel):
+    petrol = pump.tanks.get(fuel_type=FuelType.PETROL)
+    opening = stock.record_opening(diesel, Decimal("280"), staff)
+    receipt = stock.record_receipt(diesel, Decimal("1500.5"), staff, note="Tanker TN-1")
+    StockEntry.objects.filter(pk=opening.pk).update(recorded_at="2026-09-01T09:00:00+05:30")
+    StockEntry.objects.filter(pk=receipt.pk).update(recorded_at="2026-09-02T10:30:00+05:30")
+    stock.record_opening(petrol, Decimal("100"), staff)  # in October: outside the period
+
+    response = staff_api.get("/api/tanks/entries/export/", {"from": "2026-09-01", "to": "2026-09-30"})
+
+    assert response.status_code == 200
+    assert response["Content-Disposition"] == (
+        f'attachment; filename="stock-{pump.name.lower().replace(" ", "-")}-2026-09-01-to-2026-09-30.xlsx"'
+    )
+    book = load_workbook(BytesIO(response.content))
+    assert book.sheetnames == ["Petrol", "Diesel"]
+    headers = ["When", "Entry", "Litres", "Stock before (L)", "Stock after (L)", "Note", "By"]
+    assert [[cell.value for cell in row] for row in book["Petrol"].iter_rows()] == [headers]
+    assert [[cell.value for cell in row] for row in book["Diesel"].iter_rows()] == [
+        headers,
+        [datetime(2026, 9, 1, 9, 0), "Opening stock", 280, 300, 280, None, staff.full_name],
+        [datetime(2026, 9, 2, 10, 30), "Tanker receipt", 1500.5, 280, 1780.5, "Tanker TN-1", staff.full_name],
+    ]
+
+
+@pytest.mark.parametrize("maker", [MTOFactory, DriverFactory, OfficerFactory, PTOFactory])
+def test_only_pump_staff_download_their_stock_entries(api, maker):
+    api.force_login(maker())
+    assert api.get("/api/tanks/entries/export/").status_code == 403
+
+
 def test_the_mto_can_read_the_entries_of_their_pump(mto_api, staff, diesel):
-    stock.record_measurement(diesel, Decimal("280"), staff)
+    stock.record_opening(diesel, Decimal("280"), staff)
     assert len(mto_api.get(f"/api/tanks/{diesel.id}/entries/").json()) == 1
 
 
@@ -298,7 +358,7 @@ def test_the_mto_updates_the_threshold_and_capacity(mto_api, diesel):
     assert body["is_low"] is False  # 300 L against a 150 L alert level
 
 
-def test_lowering_the_threshold_re_arms_the_alert(staff_api, mto_api, mto, diesel, staff):
+def test_lowering_the_threshold_re_arms_the_alert(mto_api, mto, diesel, staff):
     stock.dispense(diesel, Decimal("250"), staff)  # 50 L against a 100 L alert level: alerted
     assert Notification.objects.filter(recipient=mto).count() == 1
 
@@ -365,7 +425,7 @@ def test_staff_cannot_change_the_threshold(staff_api, diesel):
     assert diesel.low_stock_threshold_litres == Decimal("100")
 
 
-def test_tanks_cannot_be_created_or_deleted_through_the_api(mto_api, staff_api, diesel):
+def test_tanks_cannot_be_created_or_deleted_through_the_api(mto_api, diesel):
     assert mto_api.post("/api/tanks/", {"pump": diesel.pump_id, "fuel_type": "PETROL"}).status_code == 405
     assert mto_api.delete(f"/api/tanks/{diesel.id}/").status_code == 405
     assert mto_api.put(f"/api/tanks/{diesel.id}/", {}).status_code == 405
@@ -377,4 +437,4 @@ def test_the_tank_list_uses_a_fixed_number_of_queries(mto_api, mto):
     with CaptureQueriesContext(connection) as queries:
         response = mto_api.get("/api/tanks/")
     assert len(response.json()) == 8
-    assert len(queries) <= 4  # session, user, tanks (with pump name and last measurement)
+    assert len(queries) <= 4  # session, user, tanks (with pump name and whether the opening stock is set)

@@ -157,7 +157,7 @@ def test_the_check_warns_when_a_police_pump_cannot_cover_the_litres(vehicle, dri
 
     message = refusal(PumpStaffFactory(pump=pump, unit=pump.unit), request, step=redeem.check_pin)
 
-    assert message == "Only 12.00 L of diesel in stock. Record a fresh morning measurement if this is wrong."
+    assert message == "Only 12.00 L of diesel in stock."
 
 
 # --- a successful fill -------------------------------------------------------------------------
@@ -457,7 +457,7 @@ def test_insufficient_police_stock_is_refused_and_changes_nothing(vehicle, drive
     request = ask(vehicle, driver, pump, "20")
 
     assert refusal(operator, request) == (
-        "Only 12.00 L of diesel in stock. Record a fresh morning measurement if this is wrong."
+        "Only 12.00 L of diesel in stock."
     )
     request = stored(request)
     assert request.status == RequestStatus.ISSUED

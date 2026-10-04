@@ -19,6 +19,11 @@ export const DRIVER_ROUTES: Routes = [
     loadComponent: () => import('./fuel-page').then((m) => m.FuelPage),
   },
   {
+    path: 'live',
+    title: 'Live location',
+    loadComponent: () => import('./live-location-page').then((m) => m.LiveLocationPage),
+  },
+  {
     path: 'odometer',
     title: 'Odometer',
     loadComponent: () => import('./odometer-page').then((m) => m.OdometerPage),

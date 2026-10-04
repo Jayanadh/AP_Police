@@ -8,8 +8,15 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from accounts.models import User, UserStatus, normalize_username
-from accounts.serializers.auth import ChangePasswordSerializer, LoginSerializer, MeSerializer
+from accounts import device_tokens
+from accounts.models import DeviceToken, User, UserStatus, normalize_username
+from accounts.serializers.auth import (
+    ChangePasswordSerializer,
+    DeviceSignInSerializer,
+    DeviceTokenSerializer,
+    LoginSerializer,
+    MeSerializer,
+)
 from accounts.throttles import LoginIdThrottle
 from common.exceptions import BusinessRuleError
 
@@ -46,21 +53,46 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        username = normalize_username(serializer.validated_data["username"])
-        password = serializer.validated_data["password"]
-        user = authenticate(request, username=username, password=password)
-        if user is None:
-            # Explain a blocked account only to someone who knows its password.
-            blocked = User.objects.filter(username=username).exclude(status=UserStatus.ACTIVE).first()
-            if blocked is not None and blocked.check_password(password):
-                raise BusinessRuleError(BLOCKED_MESSAGES[blocked.status])
-            raise BusinessRuleError("Invalid username or password.")
+        user = _person_signing_in(request, serializer.validated_data)
         login(request, user)
         return Response({"user": MeSerializer(user).data})
 
 
+class DeviceTokenView(APIView):
+    """The phone app's sign-in: the same login ID and password, answered with a device token instead of a session.
+    No CSRF token is needed: nothing is set in the browser, and another site cannot read the answer."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle, LoginIdThrottle]
+    throttle_scope = "login"
+
+    def post(self, request):
+        serializer = DeviceSignInSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = _person_signing_in(request, serializer.validated_data)
+        token, key = device_tokens.issue(user, serializer.validated_data["device_name"])
+        return Response({"token": key, **DeviceTokenSerializer(token).data}, status=status.HTTP_201_CREATED)
+
+
+def _person_signing_in(request, credentials) -> User:
+    """The active person the login ID and password belong to; refused with a plain reason otherwise."""
+    username = normalize_username(credentials["username"])
+    password = credentials["password"]
+    user = authenticate(request, username=username, password=password)
+    if user is None:
+        # Explain a blocked account only to someone who knows its password.
+        blocked = User.objects.filter(username=username).exclude(status=UserStatus.ACTIVE).first()
+        if blocked is not None and blocked.check_password(password):
+            raise BusinessRuleError(BLOCKED_MESSAGES[blocked.status])
+        raise BusinessRuleError("Invalid username or password.")
+    return user
+
+
 class LogoutView(APIView):
     def post(self, request):
+        if isinstance(request.auth, DeviceToken):
+            request.auth.delete()  # the phone app signing out
         logout(request)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -75,5 +107,9 @@ class ChangePasswordView(APIView):
         user.set_password(serializer.validated_data["new_password"])
         user.must_change_password = False
         user.save()
-        update_session_auth_hash(request, user)
+        # This browser or phone stays signed in; every other one now has to sign in with the new password.
+        if isinstance(request.auth, DeviceToken):
+            device_tokens.keep_signed_in(request.auth)
+        else:
+            update_session_auth_hash(request, user)
         return Response(status=status.HTTP_204_NO_CONTENT)

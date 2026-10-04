@@ -13,12 +13,10 @@ import {
 } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { apiErrorMessage } from '../../core/api-error';
-import { MastersApi, MasterItem } from '../../core/api/masters-api';
 import { Pump, PumpKind, PumpPayload, PumpsApi, pumpTone } from '../../core/api/pumps-api';
 import { LatLng, roundCoordinate } from '../../core/geo';
-import { Panel } from '../../core/panel';
 import { Icon } from '../../ui/icon';
-import { LoadError } from '../../ui/load-error';
+import { NumberField } from '../../ui/number-field';
 import { MapMarker, MapView } from '../../ui/map-view';
 
 /** Where the map opens when a pump is added: Nellore. */
@@ -32,7 +30,7 @@ const DEFAULT_HOURS = '24/7';
 const AP_LATITUDE = [12.5, 19.5];
 const AP_LONGITUDE = [76.5, 84.9];
 
-const INCOMPLETE = 'Fill in the name, address, district and location.';
+const INCOMPLETE = 'Fill in the name, address and location.';
 const NO_FUEL = 'Choose at least one fuel.';
 const OUTSIDE_AP = 'Pick a location inside Andhra Pradesh.';
 
@@ -64,7 +62,7 @@ function inside(value: number, [low, high]: number[]): boolean {
 /** Adds a pump, or changes one. The page decides what happens after it is saved. */
 @Component({
   selector: 'app-pump-form',
-  imports: [Icon, LoadError, MapView, ReactiveFormsModule],
+  imports: [Icon, MapView, NumberField, ReactiveFormsModule],
   templateUrl: './pump-form.html',
   styles: `
     :host {
@@ -181,7 +179,6 @@ function inside(value: number, [low, high]: number[]): boolean {
 })
 export class PumpForm {
   private readonly api = inject(PumpsApi);
-  private readonly masters = inject(MastersApi);
   private readonly fb = inject(NonNullableFormBuilder);
 
   /** The pump to change; leave empty to add a new one. */
@@ -198,22 +195,10 @@ export class PumpForm {
   protected readonly saving = signal(false);
   protected readonly error = signal('');
 
-  protected readonly districtList = new Panel<MasterItem[]>(() => this.masters.list('districts'));
-  /** The active districts, plus the pump's own when it has since been switched off. */
-  protected readonly districts = computed<MasterItem[]>(() => {
-    const list = this.districtList.data() ?? [];
-    const pump = this.pump();
-    if (pump && !list.some((district) => district.id === pump.district)) {
-      return [...list, { id: pump.district, name: pump.district_name, is_active: false }];
-    }
-    return list;
-  });
-
   protected readonly form = this.fb.group({
     name: ['', Validators.required],
     kind: ['POLICE' as PumpKind, Validators.required],
     address: ['', Validators.required],
-    district: [null as number | null, Validators.required],
     opening_hours: [DEFAULT_HOURS],
     // nothing ticked: the MTO says what the pump sells, rather than unticking what it does not
     sells_petrol: [false],
@@ -247,7 +232,6 @@ export class PumpForm {
   });
 
   constructor() {
-    this.districtList.load();
     effect(() => {
       const pump = this.pump();
       untracked(() => this.fillFrom(pump));
@@ -271,7 +255,6 @@ export class PumpForm {
       name: pump.name,
       kind: pump.kind,
       address: pump.address,
-      district: pump.district,
       opening_hours: pump.opening_hours,
       sells_petrol: pump.sells_petrol,
       sells_diesel: pump.sells_diesel,
@@ -329,7 +312,6 @@ export class PumpForm {
       name: value.name.trim(),
       kind: value.kind,
       address: value.address.trim(),
-      district: value.district!,
       latitude: roundCoordinate(value.latitude!),
       longitude: roundCoordinate(value.longitude!),
       opening_hours: value.opening_hours.trim() || DEFAULT_HOURS,

@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { LatLng } from '../core/geo';
 import { LeafletLoader } from './leaflet-loader';
-import { MapMarker, MapView } from './map-view';
+import { MapMarker, MapPath, MapView } from './map-view';
 
 type Handler = (event?: unknown) => void;
 
@@ -12,24 +12,47 @@ function stubLeaflet() {
     markers: [] as StubMarker[],
     tiles: [] as { url: string; options: Record<string, unknown> }[],
     icons: [] as Record<string, unknown>[],
+    /** The layer of pins (the last group made); every group, in the order they were made, is in `groups`. */
     group: null as StubGroup | null,
+    groups: [] as StubGroup[],
+    polylines: [] as StubPolyline[],
   };
 
+  /** A layer group. Typed for the pins it mostly holds; the group of lines holds StubPolylines the same way. */
   class StubGroup {
     layers: StubMarker[] = [];
+    constructor() {
+      state.groups.push(this);
+    }
     addTo() {
       return this;
     }
-    addLayer(marker: StubMarker) {
-      this.layers.push(marker);
+    addLayer(layer: StubMarker) {
+      this.layers.push(layer);
       return this;
     }
     clearLayers() {
       this.layers = [];
       return this;
     }
-    removeLayer(marker: StubMarker) {
-      this.layers = this.layers.filter((layer) => layer !== marker);
+    removeLayer(layer: StubMarker) {
+      this.layers = this.layers.filter((each) => each !== layer);
+      return this;
+    }
+  }
+
+  class StubPolyline {
+    /** How often this very line was redrawn in place. */
+    redraws = 0;
+    constructor(
+      public latlngs: [number, number][],
+      public options: Record<string, unknown>,
+    ) {
+      state.polylines.push(this);
+    }
+    setLatLngs(latlngs: [number, number][]) {
+      this.latlngs = latlngs;
+      this.redraws++;
       return this;
     }
   }
@@ -74,6 +97,9 @@ function stubLeaflet() {
     handlers: Record<string, Handler> = {};
     views: { center: [number, number]; zoom: number }[] = [];
     fits: { points: [number, number][]; options: Record<string, unknown> }[] = [];
+    pans: [number, number][] = [];
+    /** The zoom now: set by setView, and by a test standing in for a person zooming by hand. */
+    zoom: number | undefined = undefined;
     resized = 0;
     zoomedIn = 0;
     zoomedOut = 0;
@@ -92,6 +118,14 @@ function stubLeaflet() {
     }
     setView(center: [number, number], zoom: number) {
       this.views.push({ center, zoom });
+      this.zoom = zoom;
+      return this;
+    }
+    getZoom() {
+      return this.zoom;
+    }
+    panTo(center: [number, number]) {
+      this.pans.push(center);
       return this;
     }
     fitBounds(points: [number, number][], options: Record<string, unknown>) {
@@ -129,6 +163,8 @@ function stubLeaflet() {
     layerGroup: () => (state.group = new StubGroup()),
     marker: (latlng: [number, number], options: Record<string, unknown>) =>
       new StubMarker(latlng, options),
+    polyline: (latlngs: [number, number][], options: Record<string, unknown>) =>
+      new StubPolyline(latlngs, options),
     divIcon: (options: Record<string, unknown>) => {
       state.icons.push(options);
       return { options };
@@ -276,6 +312,164 @@ describe('MapView', () => {
     expect(classes[0]).toContain('<svg');
     expect(classes[2]).not.toContain('<svg');
     expect(stub.icons[0]['iconSize']).toEqual([36, 36]);
+  });
+
+  it('draws a vehicle as a car pin with its caption: dimmed when stale, larger when tracked', async () => {
+    await setup({
+      markers: [
+        {
+          id: 1,
+          lat: 14.44,
+          lng: 79.98,
+          label: 'AP39PA1001, Ravi',
+          tone: 'vehicle',
+          caption: 'AP39PA1001',
+        },
+        {
+          id: 2,
+          lat: 14.45,
+          lng: 79.99,
+          label: 'Old',
+          tone: 'vehicle-stale',
+          caption: 'AP39PA1002',
+        },
+        {
+          id: 3,
+          lat: 14.46,
+          lng: 80.0,
+          label: 'Followed',
+          tone: 'vehicle-tracked',
+          caption: 'AP39PA1003',
+        },
+      ],
+    });
+    const html = stub.icons.map((icon) => String(icon['html']));
+    expect(html[0]).toContain('map-pin-vehicle');
+    expect(html[1]).toContain('map-pin-vehicle-stale');
+    expect(html[2]).toContain('map-pin-vehicle-tracked');
+    expect(html.every((each) => each.includes('<svg'))).toBe(true);
+    expect(html[0]).toContain('<span class="map-pin-caption">AP39PA1001</span>');
+    expect(stub.icons.map((icon) => icon['iconSize'])).toEqual([
+      [36, 36],
+      [32, 32],
+      [44, 44],
+    ]);
+  });
+
+  it('writes a caption as text, never as markup', async () => {
+    await setup({
+      markers: [{ ...PUMP_A, tone: 'vehicle', caption: '<img src=x onerror=alert(1)>' }],
+    });
+    const html = String(stub.icons[0]['html']);
+    expect(html).not.toContain('<img');
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+  });
+
+  it('changes a pin in place when only its caption changes', async () => {
+    const vehicle: MapMarker = { ...PUMP_A, tone: 'vehicle', caption: 'AP39PA1001' };
+    const { fixture } = await setup({ markers: [vehicle] });
+    fixture.componentRef.setInput('markers', [{ ...vehicle, caption: 'AP39PA1009' }]);
+    await settle(fixture);
+    expect(stub.markers).toHaveLength(1);
+    expect(stub.markers[0].iconsSet).toBe(1);
+  });
+
+  it('draws each path as a line on a white outline, under the pins, and redraws it as it grows', async () => {
+    const route: MapPath = { id: 7, points: [NELLORE, { lat: 14.45, lng: 79.99 }] };
+    const { fixture } = await setup({ markers: [PUMP_A], paths: [route] });
+    const paths = stub.groups[0];
+    expect(stub.group).not.toBe(paths); // the pins have their own layer, drawn above the lines
+    const [outline, line] = stub.polylines;
+    expect(stub.polylines).toHaveLength(2);
+    expect(paths.layers).toEqual([outline, line]); // the outline first, so it lies underneath
+    expect(line.latlngs).toEqual([
+      [14.4426, 79.9865],
+      [14.45, 79.99],
+    ]);
+    expect(outline.latlngs).toEqual(line.latlngs);
+    expect(outline.options).toMatchObject({ className: 'map-path-outline', interactive: false });
+    expect(line.options).toMatchObject({
+      className: 'map-path map-path-route',
+      interactive: false,
+    });
+    expect(Number(outline.options['weight'])).toBeGreaterThan(Number(line.options['weight']));
+
+    fixture.componentRef.setInput('paths', [
+      { ...route, points: [...route.points, { lat: 14.46, lng: 80.0 }] },
+    ]);
+    await settle(fixture);
+    expect(stub.polylines).toHaveLength(2);
+    expect([outline.redraws, line.redraws]).toEqual([1, 1]);
+    expect(line.latlngs).toHaveLength(3);
+
+    fixture.componentRef.setInput('paths', []);
+    await settle(fixture);
+    expect(paths.layers).toEqual([]);
+  });
+
+  it('draws the route of the vehicle being tracked in its own style', async () => {
+    const route: MapPath = { id: 7, points: [NELLORE, { lat: 14.45, lng: 79.99 }] };
+    const { fixture } = await setup({ paths: [route] });
+    fixture.componentRef.setInput('paths', [{ ...route, tone: 'tracked' }]);
+    await settle(fixture);
+    expect(stub.groups[0].layers).toEqual([stub.polylines[2], stub.polylines[3]]);
+    expect(stub.polylines[3].options['className']).toBe('map-path map-path-tracked');
+  });
+
+  it('when live, fits the vehicles again only when one comes or goes, not each time one moves', async () => {
+    const { fixture } = await setup({ live: true, markers: [PUMP_A, PUMP_B] });
+    fixture.componentRef.setInput('markers', [{ ...PUMP_A, lat: 14.47 }, PUMP_B]);
+    await settle(fixture);
+    expect(stub.maps[0].fits).toHaveLength(1);
+    expect(stub.markers[0].latlng).toEqual([14.47, 79.98]);
+
+    fixture.componentRef.setInput('markers', [PUMP_A]);
+    await settle(fixture);
+    expect(stub.maps[0].fits).toHaveLength(2);
+  });
+
+  it('follows a marker: centres on it once, then pans along as it moves and keeps the zoom', async () => {
+    const { fixture, map } = await setup({ live: true, markers: [PUMP_A, PUMP_B] });
+    map().zoom = 11;
+
+    fixture.componentRef.setInput('follow', 2);
+    await settle(fixture);
+    expect(map().views).toEqual([{ center: [14.5, 80.0], zoom: 15 }]);
+
+    map().zoom = 17; // zoomed in by hand
+    fixture.componentRef.setInput('markers', [PUMP_A, { ...PUMP_B, lat: 14.51 }]);
+    await settle(fixture);
+    expect(map().pans).toEqual([[14.51, 80.0]]);
+    expect(map().views).toHaveLength(1); // panned, not set again at another zoom
+
+    fixture.componentRef.setInput('markers', [
+      { ...PUMP_A, lat: 14.3 },
+      { ...PUMP_B, lat: 14.51 },
+    ]);
+    await settle(fixture);
+    expect(map().pans).toHaveLength(1); // another marker moving does not move the view
+
+    fixture.componentRef.setInput('follow', null);
+    fixture.componentRef.setInput('markers', [PUMP_A, { ...PUMP_B, lat: 14.52 }]);
+    await settle(fixture);
+    expect(map().pans).toHaveLength(1);
+  });
+
+  it('keeps the zoom when it is already close in as it starts to follow', async () => {
+    const { fixture, map } = await setup({ markers: [PUMP_A] });
+    map().zoom = 17;
+    fixture.componentRef.setInput('follow', 1);
+    await settle(fixture);
+    expect(map().views.at(-1)).toEqual({ center: [14.44, 79.98], zoom: 17 });
+  });
+
+  it('re-centres on the marker it follows', async () => {
+    const { fixture, button, map } = await setup({ markers: [PUMP_A, PUMP_B], follow: 1 });
+    const views = map().views.length;
+    button('Re-centre map')!.click();
+    await settle(fixture);
+    expect(map().views).toHaveLength(views + 1);
+    expect(map().views.at(-1)!.center).toEqual([14.44, 79.98]);
   });
 
   it('emits markerClick with the id of the marker that was clicked', async () => {
@@ -450,6 +644,14 @@ describe('MapView', () => {
       [14.44, 79.98],
       [14.5, 80.0],
     ]);
+  });
+
+  it('keeps fitted pins and their captions clear of the edges and of the buttons on the right', async () => {
+    await setup({ markers: [PUMP_A, PUMP_B] });
+    expect(stub.maps[0].fits[0].options).toMatchObject({
+      paddingTopLeft: [40, 40],
+      paddingBottomRight: [72, 48],
+    });
   });
 
   it('shows Andhra Pradesh when there is neither a centre nor a marker', async () => {

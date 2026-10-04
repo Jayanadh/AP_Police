@@ -7,6 +7,7 @@ import {
   inject,
   Injector,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
@@ -17,7 +18,7 @@ import {
   pumpTone,
   pumpWhere,
 } from '../../core/api/pumps-api';
-import { FuelType } from '../../core/api/vehicles-api';
+import { fuelLabel, MyVehicles, VehiclesApi } from '../../core/api/vehicles-api';
 import { distanceKm, formatDistance, formatTravelTime, GeoService, LatLng } from '../../core/geo';
 import { Panel } from '../../core/panel';
 import { EmptyState } from '../../ui/empty-state';
@@ -25,14 +26,6 @@ import { Icon } from '../../ui/icon';
 import { LoadError } from '../../ui/load-error';
 import { MapMarker, MapView } from '../../ui/map-view';
 import { ToastService } from '../../ui/toast';
-
-type FuelFilter = 'ALL' | FuelType;
-
-const FUEL_CHIPS: readonly { value: FuelFilter; label: string }[] = [
-  { value: 'ALL', label: 'All' },
-  { value: 'PETROL', label: 'Petrol' },
-  { value: 'DIESEL', label: 'Diesel' },
-];
 
 /** A pump with how far it is from the driver (null while the location is unknown). */
 type PumpRow = { pump: DirectoryPump; km: number | null };
@@ -58,7 +51,11 @@ function zoomToShow(km: number, here: LatLng): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
 
-/** Every active pump in AP on a map and in a bottom sheet, nearest first, like the reference app's finder. */
+/**
+ * The pumps that can fill the driver's vehicle now, on a map and in a bottom sheet, nearest first, like the reference
+ * app's finder: tie-up bunks that sell its fuel and police pumps that have it in stock. A driver without a vehicle
+ * sees every open pump.
+ */
 @Component({
   selector: 'app-pump-finder-page',
   imports: [EmptyState, Icon, LoadError, MapView, RouterLink],
@@ -67,6 +64,7 @@ function zoomToShow(km: number, here: LatLng): number {
 })
 export class PumpFinderPage {
   private readonly api = inject(PumpsApi);
+  private readonly vehiclesApi = inject(VehiclesApi);
   private readonly geo = inject(GeoService);
   private readonly router = inject(Router);
   private readonly toasts = inject(ToastService);
@@ -74,16 +72,26 @@ export class PumpFinderPage {
   private readonly mapView = viewChild(MapView);
   private readonly cardStrip = viewChild<ElementRef<HTMLElement>>('cardStrip');
 
-  protected readonly fuelChips = FUEL_CHIPS;
   protected readonly formatDistance = formatDistance;
   protected readonly formatTravelTime = formatTravelTime;
   protected readonly pumpWhere = pumpWhere;
 
-  protected readonly pumps = new Panel<DirectoryPump[]>(() => this.api.directory());
+  private readonly mine = new Panel<MyVehicles>(() => this.vehiclesApi.myVehicles());
+  private readonly vehicle = computed(() => this.mine.data()?.vehicles[0] ?? null);
+  protected readonly pumps = new Panel<DirectoryPump[]>(() => {
+    const vehicle = this.vehicle();
+    return this.api.directory(vehicle ? { fuel: vehicle.fuel_type } : {});
+  });
+  /** What the list is for: the driver's vehicle and its fuel, or every pump. */
+  protected readonly forVehicle = computed(() => {
+    const vehicle = this.vehicle();
+    return vehicle
+      ? `Pumps that can fill ${vehicle.registration_number} with ${fuelLabel(vehicle.fuel_type).toLowerCase()} now.`
+      : 'You are not linked to a vehicle yet, so every pump is shown.';
+  });
   protected readonly location = signal<LatLng | null>(null);
   protected readonly locating = signal(false);
   protected readonly search = signal('');
-  protected readonly fuel = signal<FuelFilter>('ALL');
   protected readonly searchOpen = signal(false);
 
   /** Every pump with its distance, nearest first; by name while the location is unknown. */
@@ -100,24 +108,16 @@ export class PumpFinderPage {
     );
   });
 
-  /** The pumps that pass the search and the fuel chip, in the same order. */
+  /** The pumps that match the search, in the same order. */
   protected readonly rows = computed(() => {
     const term = this.search().trim().toLowerCase();
-    const fuel = this.fuel();
-    return this.allRows().filter(({ pump }) => {
-      if (fuel === 'PETROL' && !pump.sells_petrol) {
-        return false;
-      }
-      if (fuel === 'DIESEL' && !pump.sells_diesel) {
-        return false;
-      }
-      return (
+    return this.allRows().filter(
+      ({ pump }) =>
         !term ||
         [pump.name, pump.address, pump.district_name].some((text) =>
           text.toLowerCase().includes(term),
-        )
-      );
-    });
+        ),
+    );
   });
 
   protected readonly strip = computed(() => this.rows().slice(0, STRIP_SIZE));
@@ -154,9 +154,18 @@ export class PumpFinderPage {
   private asking = false;
 
   constructor() {
-    this.pumps.load();
+    // The pumps are read once it is known which vehicle (and fuel) they are for, or that there is none.
+    this.mine.load();
+    effect(() => {
+      const known = this.mine.data() !== null || this.mine.error() !== '';
+      untracked(() => {
+        if (known && !this.pumps.requested) {
+          this.pumps.load();
+        }
+      });
+    });
     this.locate(false);
-    // A new order (the location arrived, a filter changed) starts the strip at the nearest pump again;
+    // A new order (the location arrived, the search changed) starts the strip at the nearest pump again;
     // otherwise scroll snapping keeps the card that was in view, wherever it moved to.
     effect(() => {
       this.rows();
@@ -215,9 +224,8 @@ export class PumpFinderPage {
     this.search.set('');
   }
 
-  protected clearFilters(): void {
+  protected clearSearch(): void {
     this.search.set('');
-    this.fuel.set('ALL');
   }
 
   protected openPump(id: number): void {

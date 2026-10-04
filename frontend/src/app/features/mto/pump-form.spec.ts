@@ -2,17 +2,11 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { MasterItem } from '../../core/api/masters-api';
 import { Pump } from '../../core/api/pumps-api';
 import { LatLng } from '../../core/geo';
 import { MapView } from '../../ui/map-view';
 import { NEVER_LOADING_LEAFLET } from '../../ui/testing/leaflet-stub';
 import { PumpForm } from './pump-form';
-
-const DISTRICTS_URL = '/api/masters/districts/?active=1';
-
-const district = (id: number, name: string): MasterItem => ({ id, name, is_active: true });
-const DISTRICTS = [district(7, 'Nellore'), district(8, 'Prakasam')];
 
 const pump = (overrides: Partial<Pump> = {}): Pump => ({
   id: 3,
@@ -42,7 +36,7 @@ describe('PumpForm', () => {
 
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
-  async function setup(existing: Pump | null = null, districts: MasterItem[] | 'fail' = DISTRICTS) {
+  async function setup(existing: Pump | null = null) {
     const http = TestBed.inject(HttpTestingController);
     const fixture: ComponentFixture<PumpForm> = TestBed.createComponent(PumpForm);
     if (existing) {
@@ -53,13 +47,6 @@ describe('PumpForm', () => {
     fixture.componentInstance.saved.subscribe((row) => saved.push(row));
     fixture.componentInstance.cancelled.subscribe(() => cancelled++);
     await fixture.whenStable();
-    const request = http.expectOne(DISTRICTS_URL);
-    if (districts === 'fail') {
-      request.flush({ detail: 'Not available.' }, { status: 500, statusText: 'Server' });
-    } else {
-      request.flush(districts);
-    }
-    await fixture.whenStable();
 
     const el = fixture.nativeElement as HTMLElement;
     const text = (node: Element | null | undefined) =>
@@ -69,12 +56,6 @@ describe('PumpForm', () => {
       const input = field(id)!;
       input.value = value;
       input.dispatchEvent(new Event('input'));
-    };
-    const choose = (id: string, optionLabel: string) => {
-      const select = el.querySelector(`#${id}`) as HTMLSelectElement;
-      const option = Array.from(select.options).find((o) => text(o) === optionLabel)!;
-      select.value = option.value;
-      select.dispatchEvent(new Event('change'));
     };
     const button = (name: string) =>
       Array.from(el.querySelectorAll('button')).find((b) => text(b) === name) as
@@ -102,7 +83,6 @@ describe('PumpForm', () => {
       fill('pump-name', ' Kavali Bunk ');
       kind('Tie-up bunk').click();
       fill('pump-address', ' NH16, Kavali ');
-      choose('pump-district', 'Prakasam');
       for (const name of fuels) {
         fuel(name).click();
       }
@@ -117,7 +97,6 @@ describe('PumpForm', () => {
       text,
       field,
       fill,
-      choose,
       button,
       kind,
       fuel,
@@ -128,13 +107,12 @@ describe('PumpForm', () => {
     };
   }
 
-  it('asks for the name, address, district, opening hours, fuels and location', async () => {
+  it('asks for the name, address, opening hours, fuels and location', async () => {
     const { el, text } = await setup();
     const label = (id: string) => text(el.querySelector(`label[for="${id}"]`));
     expect(text(el.querySelector('h2'))).toBe('Add pump');
     expect(label('pump-name')).toBe('Name');
     expect(label('pump-address')).toBe('Address');
-    expect(label('pump-district')).toBe('District');
     expect(label('pump-hours')).toBe('Opening hours');
     expect(label('pump-latitude')).toBe('Latitude');
     expect(label('pump-longitude')).toBe('Longitude');
@@ -156,10 +134,10 @@ describe('PumpForm', () => {
     expect(kind('Police pump').checked).toBe(false);
   });
 
-  it('offers the active districts', async () => {
-    const { el, text } = await setup();
-    const options = Array.from(el.querySelectorAll('#pump-district option')).map((o) => text(o));
-    expect(options).toEqual(['Select district', 'Nellore', 'Prakasam']);
+  it("asks for no district: a pump is in the district of the MTO's office", async () => {
+    const { el } = await setup();
+    expect(el.querySelector('#pump-district')).toBeNull();
+    TestBed.inject(HttpTestingController).expectNone(() => true);
   });
 
   it('starts with 24/7 opening hours and no fuel ticked, so the MTO chooses', async () => {
@@ -256,7 +234,7 @@ describe('PumpForm', () => {
     await s.fixture.whenStable();
     s.http.expectNone('/api/pumps/');
     expect(s.text(s.el.querySelector('[role="alert"]'))).toBe(
-      'Fill in the name, address, district and location.',
+      'Fill in the name, address and location.',
     );
   });
 
@@ -282,7 +260,6 @@ describe('PumpForm', () => {
       name: 'Kavali Bunk',
       kind: 'TIE_UP',
       address: 'NH16, Kavali',
-      district: 8,
       latitude: 14.9,
       longitude: 80,
       opening_hours: '24/7',
@@ -344,11 +321,6 @@ describe('PumpForm', () => {
     expect(s.field('pump-name')!.value).toBe('Nellore Police Pump');
     expect(s.kind('Tie-up bunk').checked).toBe(true);
     expect(s.field('pump-address')!.value).toBe('Police Lines, Nellore');
-    expect(
-      (
-        s.field('pump-district') as unknown as HTMLSelectElement
-      ).selectedOptions[0].textContent?.trim(),
-    ).toBe('Nellore');
     expect(s.field('pump-hours')!.value).toBe('6am-10pm');
     expect(s.field('pump-latitude')!.value).toBe('14.4426');
     expect(s.field('pump-longitude')!.value).toBe('79.9865');
@@ -365,7 +337,6 @@ describe('PumpForm', () => {
       name: 'Nellore Main Bunk',
       kind: 'TIE_UP',
       address: 'Police Lines, Nellore',
-      district: 7,
       latitude: 14.4426,
       longitude: 79.9865,
       opening_hours: '6am-10pm',
@@ -377,21 +348,5 @@ describe('PumpForm', () => {
     await s.fixture.whenStable();
     expect(s.saved).toEqual([changed]);
     expect(s.text(s.el.querySelector('button[type="submit"]'))).toBe('Save changes');
-  });
-
-  it('keeps an inactive district of an existing pump in the list', async () => {
-    const { el, text } = await setup(pump({ district: 99, district_name: 'Old District' }));
-    const options = Array.from(el.querySelectorAll('#pump-district option')).map((o) => text(o));
-    expect(options).toEqual(['Select district', 'Nellore', 'Prakasam', 'Old District']);
-  });
-
-  it('says so, and offers to try again, when the districts cannot be read', async () => {
-    const s = await setup(null, 'fail');
-    expect(s.text(s.el.querySelector('[role="alert"]'))).toBe('Not available.');
-    s.button('Try again')!.click();
-    s.http.expectOne(DISTRICTS_URL).flush(DISTRICTS);
-    await s.fixture.whenStable();
-    expect(s.el.querySelector('[role="alert"]')).toBeNull();
-    expect(s.field('pump-district')).toBeTruthy();
   });
 });

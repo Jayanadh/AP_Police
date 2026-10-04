@@ -42,13 +42,6 @@ const KOLKATA_YEAR_MONTH = new Intl.DateTimeFormat('en-CA', {
   timeZone: TIME_ZONE,
 });
 
-const KOLKATA_DAY = new Intl.DateTimeFormat('en-CA', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  timeZone: TIME_ZONE,
-});
-
 /** Formats litres, e.g. "12.50" -> "12.5 L". */
 export function litres(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === '') {
@@ -106,12 +99,6 @@ export function formatDateTime(iso: string | null): string {
   return `${p['day']} ${p['month']} ${p['year']}, ${p['hour']}:${p['minute']} ${p['dayPeriod'].toLowerCase()}`;
 }
 
-/** Whether the moment falls on the same Asia/Kolkata calendar day as `now`. A missing or invalid moment is no day. */
-export function isToday(iso: string | null, now: Date = new Date()): boolean {
-  const date = parse(iso);
-  return date !== null && KOLKATA_DAY.format(date) === KOLKATA_DAY.format(now);
-}
-
 /** "2:05 pm" in Asia/Kolkata. */
 export function formatTime(iso: string | null): string {
   const date = parse(iso);
@@ -120,6 +107,31 @@ export function formatTime(iso: string | null): string {
   }
   const p = parts(TIME_FORMAT, date);
   return `${p['hour']}:${p['minute']} ${p['dayPeriod'].toLowerCase()}`;
+}
+
+/**
+ * How long ago a moment was, for live locations: "just now", "12 mins ago", "2 h 1 min ago"; from a day back the
+ * date and time. A moment a little ahead (a phone's clock running fast) counts as just now.
+ */
+export function timeAgo(iso: string | null, now: Date): string {
+  const date = parse(iso);
+  if (date === null) {
+    return NO_VALUE;
+  }
+  const minutes = Math.floor((now.getTime() - date.getTime()) / 60_000);
+  if (minutes < 1) {
+    return 'just now';
+  }
+  const mins = (count: number) => `${count} ${count === 1 ? 'min' : 'mins'}`;
+  if (minutes < 60) {
+    return `${mins(minutes)} ago`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    const rest = minutes % 60;
+    return rest === 0 ? `${hours} h ago` : `${hours} h ${mins(rest)} ago`;
+  }
+  return formatDateTime(iso);
 }
 
 function splitMonth(month: string): { year: number; index: number } {

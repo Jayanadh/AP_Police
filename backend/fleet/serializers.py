@@ -128,6 +128,16 @@ class AssignSerializer(serializers.Serializer):
         self.fields["person"].queryset = User.objects.filter(unit=self.context["request"].user.unit)
 
 
+class MyVehicleSerializer(VehicleSerializer):
+    """A vehicle as its officer or driver sees it, with the lowest odometer reading it may take next. Needs
+    `latest_odometer_km` on the instance (see `odometer.with_latest_odometer_km`)."""
+
+    latest_odometer_km = serializers.IntegerField(read_only=True)
+
+    class Meta(VehicleSerializer.Meta):
+        fields = [*VehicleSerializer.Meta.fields, "latest_odometer_km"]
+
+
 class OdometerSubmitSerializer(serializers.Serializer):
     reading_km = serializers.IntegerField(min_value=0, max_value=MAX_ODOMETER_KM)
 

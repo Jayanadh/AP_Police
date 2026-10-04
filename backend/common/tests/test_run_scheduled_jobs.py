@@ -15,7 +15,7 @@ from testing.factories import FuelRequestFactory
 pytestmark = pytest.mark.django_db
 
 
-def test_the_command_runs_the_four_jobs_in_order_and_prints_what_each_did():
+def test_the_command_runs_the_seven_jobs_in_order_and_prints_what_each_did():
     stale = FuelRequestFactory(expires_at=timezone.now() - timedelta(hours=1))
     out = StringIO()
 
@@ -26,6 +26,9 @@ def test_the_command_runs_the_four_jobs_in_order_and_prints_what_each_did():
         "remind_overdue_duty: 0",
         "alert_missing_odometer: 0",
         "alert_service_due: 0",
+        "end_silent_trips: 0",
+        "forget_old_locations: 0",
+        "delete_expired_device_tokens: 0",
     ]
     stale.refresh_from_db()
     assert stale.status == RequestStatus.EXPIRED

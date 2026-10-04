@@ -71,6 +71,18 @@ export type FuelRequestPayload = {
 };
 
 /** A request waiting at the operator's pump: who is coming, but not the litres, which the PIN reveals. */
+/** A fill as the pump's staff see it: the vehicle, the litres, when, and the officer the vehicle was linked to then. */
+export type PumpFill = {
+  id: number;
+  registration_number: string;
+  driver_name: string;
+  fuel_type: FuelType;
+  litres_filled: string;
+  filled_at: string;
+  /** Null when the vehicle had no officer at the time. */
+  officer_name: string | null;
+};
+
 export type IncomingRequest = {
   id: number;
   vehicle: number;
@@ -154,11 +166,11 @@ export class FuelRequestsApi {
   }
 
   /** For pump staff: the fills made at their pump in a period ("YYYY-MM-DD"; this month when none), newest first. */
-  pumpFills(period?: { from: string; to: string }): Observable<FuelRequest[]> {
+  pumpFills(period?: { from: string; to: string }): Observable<PumpFill[]> {
     let params = new HttpParams();
     if (period) {
       params = params.set('from', period.from).set('to', period.to);
     }
-    return this.http.get<FuelRequest[]>('/api/fuel/pump-fills/', { params });
+    return this.http.get<PumpFill[]>('/api/fuel/pump-fills/', { params });
   }
 }

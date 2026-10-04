@@ -1,0 +1,170 @@
+<div class="page">
+  <app-page-header
+    title="Live tracking"
+    subtitle="Where your office's vehicles are while their drivers share their live location on duty."
+  />
+
+  @if (board.loading()) {
+    <p class="muted" role="status">Loading the live map…</p>
+  } @else if (board.error() && !board.data()) {
+    <section class="card">
+      <app-load-error [message]="board.error()" (retry)="board.load()" />
+    </section>
+  } @else {
+    <div class="layout">
+      <section class="map-card" aria-label="Live map">
+        <app-map-view
+          [markers]="markers()"
+          [paths]="paths()"
+          [live]="true"
+          [follow]="tracked()"
+          (markerClick)="trackDriver($event)"
+        />
+        @if (trackedRow(); as row) {
+          <div class="tracking-bar" role="status">
+            <span class="tracking-dot" aria-hidden="true"></span>
+            <span class="tracking-text">
+              Tracking <strong>{{ registration(row) }}</strong> · {{ row.driver.full_name }}
+            </span>
+            <button
+              type="button"
+              class="btn-icon stop-tracking"
+              aria-label="Stop tracking"
+              title="Stop tracking"
+              (click)="stopTracking()"
+            >
+              <app-icon name="x" [size]="18" />
+            </button>
+          </div>
+        }
+      </section>
+
+      <section class="card list-card" aria-labelledby="drivers-title">
+        <div class="list-head">
+          <h2 id="drivers-title">Drivers</h2>
+          <p class="summary">
+            <span class="live-count">{{ sharingCount() }}</span> of {{ rows().length }} drivers
+            sharing
+          </p>
+        </div>
+
+        @if (board.error()) {
+          <p class="error" role="alert">{{ board.error() }}</p>
+        }
+
+        @if (rows().length === 0) {
+          <app-empty-state
+            icon="users"
+            title="No drivers in your office yet."
+            text="Add drivers and link them to vehicles; they start sharing from their phones."
+          />
+        } @else {
+          <div class="field search">
+            <input
+              id="live-search"
+              type="search"
+              placeholder="Search vehicle or driver"
+              aria-label="Search vehicle or driver"
+              [value]="search()"
+              (input)="setSearch($any($event.target).value)"
+            />
+          </div>
+
+          @if (picked().size > 0) {
+            <div class="picked-bar">
+              <span>{{ picked().size }} picked for the map</span>
+              <button type="button" class="btn btn-ghost btn-sm" (click)="showAll()">
+                Show all
+              </button>
+            </div>
+          }
+
+          @if (sharingCount() === 0) {
+            <p class="nobody">
+              <app-icon name="radio" [size]="20" />
+              <span>
+                No one is sharing their live location right now. Drivers start it from Live location
+                on their phones.
+              </span>
+            </p>
+          }
+
+          @if (sharing().length > 0) {
+            <ul class="list sharing">
+              @for (row of sharing(); track row.driver.id) {
+                <li
+                  class="vehicle-row"
+                  [class.stale]="isStale(row)"
+                  [class.tracked]="tracked() === row.driver.id"
+                >
+                  <input
+                    type="checkbox"
+                    class="pick"
+                    [checked]="picked().has(row.driver.id)"
+                    [attr.aria-label]="'Show ' + registration(row) + ' on the map'"
+                    (change)="pick(row.driver.id, $any($event.target).checked)"
+                  />
+                  <div class="who">
+                    <div class="title">
+                      <span class="reg">{{ registration(row) }}</span>
+                      @if (row.vehicle) {
+                        <span class="muted">{{ row.vehicle.vehicle_name }}</span>
+                      }
+                    </div>
+                    <div class="driver">
+                      {{ row.driver.full_name }}
+                      @if (row.driver.emp_id) {
+                        <span class="muted">· {{ row.driver.emp_id }}</span>
+                      }
+                    </div>
+                    <div class="duty">{{ row.trip!.duty_particulars }}</div>
+                    <div class="seen">
+                      <span class="seen-dot" aria-hidden="true"></span>
+                      {{ seen(row) }} · since {{ formatTime(row.trip!.started_at) }}
+                    </div>
+                  </div>
+                  <div class="row-actions">
+                    <button
+                      type="button"
+                      class="btn btn-sm"
+                      [class.btn-primary]="tracked() === row.driver.id"
+                      [class.btn-secondary]="tracked() !== row.driver.id"
+                      [attr.aria-pressed]="tracked() === row.driver.id"
+                      (click)="toggleTrack(row)"
+                    >
+                      {{ tracked() === row.driver.id ? 'Stop tracking' : 'Track' }}
+                    </button>
+                    <a
+                      class="btn-icon call"
+                      [href]="'tel:' + row.driver.mobile"
+                      [attr.aria-label]="'Call ' + row.driver.full_name"
+                      [title]="'Call ' + row.driver.full_name"
+                    >
+                      <app-icon name="phone" [size]="18" />
+                    </a>
+                  </div>
+                </li>
+              }
+            </ul>
+          }
+
+          @if (notSharing().length > 0) {
+            <h3 class="group-title">Not sharing</h3>
+            <ul class="list not-sharing">
+              @for (row of notSharing(); track row.driver.id) {
+                <li class="list-row quiet-row">
+                  <span class="quiet-name">{{ row.driver.full_name }}</span>
+                  <span class="muted">{{ row.vehicle?.registration_number ?? 'No vehicle' }}</span>
+                </li>
+              }
+            </ul>
+          }
+
+          @if (search() && sharing().length === 0 && notSharing().length === 0) {
+            <p class="muted">Nothing matches “{{ search() }}”.</p>
+          }
+        }
+      </section>
+    </div>
+  }
+</div>

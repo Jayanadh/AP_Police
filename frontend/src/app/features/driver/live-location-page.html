@@ -1,0 +1,202 @@
+<div class="page">
+  <app-page-header
+    title="Live location"
+    subtitle="Share where your vehicle is while you are on duty. Your MTO sees it on the live map."
+  />
+
+  @if (live.state() === 'checking') {
+    <p class="muted" role="status">Checking your live location…</p>
+  } @else if (live.state() === 'unknown') {
+    <section class="card">
+      <app-load-error
+        message="Could not check your live location. Check your connection."
+        (retry)="live.check()"
+      />
+    </section>
+  } @else if (live.state() === 'on' || live.state() === 'stopping') {
+    @if (live.trip(); as trip) {
+      <div class="layout">
+        <section class="card status-card" aria-labelledby="status-title">
+          <div class="head">
+            <span class="pulse" aria-hidden="true"></span>
+            <div>
+              <h2 id="status-title">Sharing your live location</h2>
+              <p class="muted">
+                Since {{ formatTime(trip.started_at) }} · {{ trip.registration_number }}
+              </p>
+            </div>
+          </div>
+
+          <div class="duty">
+            <span class="label">Duty</span>
+            <p>{{ trip.duty_particulars }}</p>
+          </div>
+
+          <dl class="facts">
+            <div>
+              <dt>Last location sent</dt>
+              <dd>{{ trip.last_point_at ? formatTime(trip.last_point_at) : 'Not yet' }}</dd>
+            </div>
+            <div>
+              <dt>Accuracy</dt>
+              <dd>{{ accuracy() }}</dd>
+            </div>
+          </dl>
+
+          @if (live.locationProblem()) {
+            <p class="note note-danger" role="alert">
+              <app-icon name="alert-triangle" [size]="20" />
+              <span>{{ live.locationProblem() }}</span>
+            </p>
+            @if (live.settingsHelpWith(live.locationProblem())) {
+              <button
+                type="button"
+                class="btn btn-secondary settings"
+                (click)="live.openSettings()"
+              >
+                Open settings
+              </button>
+            }
+          }
+          @if (live.sendProblem()) {
+            <p class="note note-warning" role="status">
+              <app-icon name="info" [size]="20" />
+              <span>{{ live.sendProblem() }}</span>
+            </p>
+          }
+          <!-- A few always wait between sends; the count matters once sending is held up. -->
+          @if (live.sendProblem() && live.waiting() > 0) {
+            <p class="note note-info" role="status">
+              <app-icon name="upload" [size]="20" />
+              <span>{{ waitingText() }}</span>
+            </p>
+          }
+
+          <p class="screen-note">
+            <app-icon name="info" [size]="18" />
+            @if (live.carriesOnClosed) {
+              <span>
+                Sharing goes on with the screen locked, another app open or the app closed. A
+                notification shows while it does.
+              </span>
+            } @else if (live.inBackground) {
+              <span>
+                Sharing goes on with the screen locked or another app open. Swiping the app away
+                stops it until you open the app again.
+              </span>
+            } @else if (live.screenKeptOn()) {
+              <span>
+                The screen stays on while this page is open. If the phone locks or you switch to
+                another app, locations pause until you come back.
+              </span>
+            } @else {
+              <span>
+                Keep this page open with the screen on. A phone pauses web pages in the background,
+                and no locations are recorded while it does.
+              </span>
+            }
+          </p>
+
+          @if (live.state() === 'stopping') {
+            <button type="button" class="btn btn-danger btn-block" disabled>Stopping…</button>
+          } @else {
+            <app-confirm-button
+              class="stop"
+              label="Stop live location"
+              confirmLabel="Tap again to stop"
+              (confirmed)="stop()"
+            />
+          }
+          @if (stopError()) {
+            <p class="error" role="alert">{{ stopError() }}</p>
+          }
+        </section>
+
+        <section class="map-card" aria-label="Your route">
+          <app-map-view [markers]="markers()" [paths]="paths()" [follow]="HERE" [live]="true" />
+        </section>
+      </div>
+    }
+  } @else {
+    @if (live.ended()) {
+      <p class="note note-warning" role="status">
+        <app-icon name="alert-triangle" [size]="20" />
+        <span><strong>Live location stopped.</strong> {{ live.ended() }}</span>
+      </p>
+    }
+    @if (vehicles.loading()) {
+      <p class="muted" role="status">Loading your vehicle…</p>
+    } @else if (vehicles.error()) {
+      <section class="card">
+        <app-load-error [message]="vehicles.error()" (retry)="vehicles.load()" />
+      </section>
+    } @else if (!vehicle()) {
+      <section class="card">
+        <app-empty-state
+          icon="car"
+          title="You are not linked to a vehicle yet."
+          text="Live location shares where your vehicle is. Contact your MTO."
+        />
+      </section>
+    } @else {
+      <section class="card card-hero start-card" aria-labelledby="start-title">
+        <div class="head">
+          <span class="round"><app-icon name="radio" [size]="26" /></span>
+          <div>
+            <h2 id="start-title">Live location is off</h2>
+            <p class="muted">{{ vehicle()!.registration_number }}</p>
+          </div>
+        </div>
+        <p class="explain">
+          Start it when you set out on duty. Your MTO then sees where the vehicle is until you stop
+          it on your return.
+        </p>
+
+        @if (live.state() === 'starting') {
+          <button type="button" class="btn btn-primary btn-block" disabled>
+            Getting your location…
+          </button>
+        } @else if (asking()) {
+          <form class="duty-form" (submit)="$event.preventDefault(); start()">
+            <div class="field">
+              <label for="duty-particulars">Duty particulars</label>
+              <textarea
+                #dutyField
+                id="duty-particulars"
+                rows="3"
+                maxlength="1000"
+                placeholder="Where you are going and why, e.g. Night patrol, Kavali highway"
+                [value]="duty()"
+                (input)="duty.set($any($event.target).value)"
+              ></textarea>
+            </div>
+            @if (startError()) {
+              <p class="error" role="alert">{{ startError() }}</p>
+              @if (live.settingsHelpWith(startError())) {
+                <button
+                  type="button"
+                  class="btn btn-secondary settings"
+                  (click)="live.openSettings()"
+                >
+                  Open settings
+                </button>
+              }
+            }
+            <div class="actions">
+              <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>
+              <button type="submit" class="btn btn-primary">OK</button>
+            </div>
+          </form>
+        } @else {
+          @if (startError()) {
+            <p class="error" role="alert">{{ startError() }}</p>
+          }
+          <button type="button" class="btn btn-primary btn-block" (click)="ask()">
+            <app-icon name="radio" [size]="20" />
+            Start live location
+          </button>
+        }
+      </section>
+    }
+  }
+</div>

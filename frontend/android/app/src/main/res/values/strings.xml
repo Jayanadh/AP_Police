@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AP Police MTO</string>
+    <string name="title_activity_main">AP Police MTO</string>
+    <string name="package_name">in.gov.appolice.mto</string>
+    <string name="custom_url_scheme">in.gov.appolice.mto</string>
+
+    <!-- Live location (location/DutyLocationService.java): its notifications while it shares and once it stopped by
+         itself. What the sharing notification says comes from the app (location-source.ts). -->
+    <string name="live_location_channel">Live location</string>
+    <string name="live_location_sharing">Sharing live location</string>
+    <string name="live_location_stopped">Live location stopped</string>
+    <string name="live_location_ended">This trip has ended.</string>
+    <string name="live_location_sign_in">You are no longer signed in on this phone. Open the app and sign in, then start live location again.</string>
+</resources>

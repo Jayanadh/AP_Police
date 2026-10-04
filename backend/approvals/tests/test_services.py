@@ -106,8 +106,12 @@ def test_the_mto_is_alerted_when_an_officer_is_approved_or_rejected(mto, pto, pe
     services.decide(rejected, pto, approve=False, note="Wrong cadre")
 
     first, second = sorted(notes_for(mto), key=lambda n: n.id)
-    assert (first.title, first.body, first.link) == ("Officer approved", "Ravi Kumar (EMP7001): Verified", "/mto/officers")
-    assert (second.title, second.body, second.link) == ("Officer rejected", "Sita Devi (EMP7002): Wrong cadre", "/mto/officers")
+    assert (first.title, first.body, first.link) == (
+        "Officer approved", "Ravi Kumar (EMP7001): Verified", "/mto/officers"
+    )
+    assert (second.title, second.body, second.link) == (
+        "Officer rejected", "Sita Devi (EMP7002): Wrong cadre", "/mto/officers"
+    )
     assert notes_for(other_mto) == []
     assert [n.title for n in notes_for(pto)] == ["New officer waiting for approval"] * 2  # nothing for the decisions
 

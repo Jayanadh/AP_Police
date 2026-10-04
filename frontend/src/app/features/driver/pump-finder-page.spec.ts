@@ -4,12 +4,19 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { DirectoryPump } from '../../core/api/pumps-api';
+import { MyVehicles } from '../../core/api/vehicles-api';
 import { GeoService, LatLng } from '../../core/geo';
+import { makeMyVehicle } from '../../core/test-data';
 import { MapView } from '../../ui/map-view';
 import { NEVER_LOADING_LEAFLET } from '../../ui/testing/leaflet-stub';
 import { PumpFinderPage } from './pump-finder-page';
 
-const DIRECTORY_URL = '/api/pump-directory/';
+/** The driver's diesel jeep: the finder asks only for the pumps that can fill diesel now. */
+const MINE: MyVehicles = {
+  vehicles: [makeMyVehicle({ registration_number: 'AP39PA1001', fuel_type: 'DIESEL' })],
+  mto: { unit_name: 'MTO Nellore', full_name: 'Ravi Kumar', mobile: '9876543210' },
+};
+const DIRECTORY_URL = '/api/pump-directory/?fuel=DIESEL';
 const HERE: LatLng = { lat: 14.4426, lng: 79.9865 };
 
 const pump = (overrides: Partial<DirectoryPump> = {}): DirectoryPump => ({
@@ -72,6 +79,7 @@ describe('PumpFinderPage', () => {
   async function setup(
     positions: (LatLng | null)[] = [HERE],
     rows: DirectoryPump[] | 'fail' = [NELLORE, KAVALI, GUNTUR],
+    mine: MyVehicles = MINE,
   ) {
     const geo = new GeoStub(positions);
     TestBed.configureTestingModule({
@@ -93,8 +101,11 @@ describe('PumpFinderPage', () => {
     const fixture = TestBed.createComponent(PumpFinderPage);
     const el = fixture.nativeElement as HTMLElement;
     await fixture.whenStable();
+    http.expectOne('/api/me/vehicles/').flush(mine);
+    await fixture.whenStable();
+    const directoryUrl = mine.vehicles.length ? DIRECTORY_URL : '/api/pump-directory/';
     const reply = async (body: DirectoryPump[] | 'fail') => {
-      const req = http.expectOne(DIRECTORY_URL);
+      const req = http.expectOne(directoryUrl);
       expect(req.request.method).toBe('GET');
       if (body === 'fail') {
         req.flush({ detail: 'Not available.' }, { status: 500, statusText: 'Server' });
@@ -115,10 +126,6 @@ describe('PumpFinderPage', () => {
       Array.from(el.querySelectorAll<HTMLButtonElement>('button')).find(
         (b) => text(b) === label || b.getAttribute('aria-label') === label,
       );
-    const chip = (label: string) =>
-      Array.from(el.querySelectorAll<HTMLButtonElement>('.fuel-chips .chip')).find(
-        (b) => text(b) === label,
-      )!;
     const search = async (term: string) => {
       const input = el.querySelector<HTMLInputElement>('#pump-search')!;
       input.value = term;
@@ -139,7 +146,6 @@ describe('PumpFinderPage', () => {
       listRows,
       names,
       button,
-      chip,
       search,
       map,
     };
@@ -193,28 +199,27 @@ describe('PumpFinderPage', () => {
     expect(el.querySelector('.location-note')).toBeNull();
   });
 
-  it('filters the pumps by the fuel they sell', async () => {
-    const { el, text, cards, names, chip, fixture } = await setup();
-    expect(chip('All').getAttribute('aria-pressed')).toBe('true');
+  it("shows only the pumps that can fill the driver's vehicle now, and says so", async () => {
+    const { el, text } = await setup();
+    expect(el.querySelector('.fuel-chips')).toBeNull();
+    expect(text(el.querySelector('.for-vehicle'))).toBe(
+      'Pumps that can fill AP39PA1001 with diesel now.',
+    );
+  });
 
-    chip('Diesel').click();
-    await fixture.whenStable();
-    expect(chip('Diesel').getAttribute('aria-pressed')).toBe('true');
-    expect(chip('All').getAttribute('aria-pressed')).toBe('false');
-    expect(names(cards())).toEqual(['Nellore Police Pump', 'Guntur Police Pump']);
-    expect(text(el.querySelector('h1'))).toBe('Found 2 petrol stations near you');
-
-    chip('Petrol').click();
-    await fixture.whenStable();
-    expect(names(cards())).toEqual(['Nellore Police Pump', 'Kavali Bunk']);
-
-    chip('All').click();
-    await fixture.whenStable();
+  it('shows every open pump to a driver who has no vehicle yet', async () => {
+    const { text, el, cards } = await setup([HERE], [NELLORE, KAVALI, GUNTUR], {
+      ...MINE,
+      vehicles: [],
+    });
     expect(cards()).toHaveLength(3);
+    expect(text(el.querySelector('.for-vehicle'))).toBe(
+      'You are not linked to a vehicle yet, so every pump is shown.',
+    );
   });
 
   it('filters the pumps by name, address or district as the driver types', async () => {
-    const { el, text, cards, names, search, chip, fixture } = await setup();
+    const { el, text, cards, names, search } = await setup();
     await search('kavali');
     expect(names(cards())).toEqual(['Kavali Bunk']);
     expect(text(el.querySelector('h1'))).toBe('Found 1 petrol station near you');
@@ -228,25 +233,19 @@ describe('PumpFinderPage', () => {
     // By district: Kavali is in Nellore district too.
     await search('nellore');
     expect(names(cards())).toEqual(['Nellore Police Pump', 'Kavali Bunk']);
-
-    chip('Diesel').click();
-    await fixture.whenStable();
-    expect(names(cards())).toEqual(['Nellore Police Pump']);
   });
 
-  it('says so when nothing matches, and clears the filters on request', async () => {
-    const { el, text, cards, search, button, fixture, chip } = await setup();
-    chip('Petrol').click();
+  it('says so when nothing matches, and clears the search on request', async () => {
+    const { el, text, cards, search, button, fixture } = await setup();
     await search('vizag');
     expect(cards()).toHaveLength(0);
     expect(text(el.querySelector('h1'))).toBe('Found 0 petrol stations near you');
     expect(text(el.querySelector('app-empty-state'))).toContain('No pumps match your search.');
 
-    button('Clear filters')!.click();
+    button('Clear search')!.click();
     await fixture.whenStable();
     expect(cards()).toHaveLength(3);
     expect(el.querySelector<HTMLInputElement>('#pump-search')!.value).toBe('');
-    expect(chip('All').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('opens and closes the search box from its round button', async () => {
@@ -266,7 +265,7 @@ describe('PumpFinderPage', () => {
   });
 
   it('puts the pumps and the driver on a map that can be dragged with one finger', async () => {
-    const { map, chip, fixture } = await setup();
+    const { map, search } = await setup();
     expect(map().touchDrag()).toBe(true);
     const markers = map().markers();
     expect(markers.map((m) => m.id)).toEqual([3, 4, 7, -1]);
@@ -284,9 +283,8 @@ describe('PumpFinderPage', () => {
     );
     expect(map().center()).toEqual(HERE);
 
-    // The map shows the pumps that pass the filters.
-    chip('Diesel').click();
-    await fixture.whenStable();
+    // The map shows the pumps that match the search.
+    await search('police');
     expect(
       map()
         .markers()

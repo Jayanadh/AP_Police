@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { OfficerDashboard as OfficerSummary } from '../../core/api/dashboard-api';
 import { MyVehicles } from '../../core/api/vehicles-api';
-import { makeMe, makeVehicle, signInAs } from '../../core/test-data';
+import { makeMe, makeMyVehicle, signInAs } from '../../core/test-data';
 import { OfficerDashboard } from './officer-dashboard';
 
 const SUMMARY: OfficerSummary = {
@@ -54,7 +54,7 @@ const SUMMARY: OfficerSummary = {
 
 const MINE: MyVehicles = {
   vehicles: [
-    makeVehicle({
+    makeMyVehicle({
       id: 5,
       current_driver: {
         assignment_id: 11,
@@ -64,7 +64,7 @@ const MINE: MyVehicles = {
         mobile: '9123456780',
       },
     }),
-    makeVehicle({ id: 6, registration_number: 'AP39PB5678' }),
+    makeMyVehicle({ id: 6, registration_number: 'AP39PB5678' }),
   ],
   mto: { unit_name: 'MTO Nellore', full_name: 'Ravi Kumar', mobile: '9876543210' },
 };

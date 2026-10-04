@@ -1,8 +1,8 @@
 """A driver's fuel requests: raising one (and getting its PIN), letting it run out, cancelling it.
 
 The driver picks the pump (a police pump or a tie-up bunk of any office in AP) when asking; the request then waits
-in that pump's incoming list, and only that pump can fill it. A request is open (ISSUED) until it is filled, cancelled
-or expired. A vehicle has at most one open request.
+in that pump's incoming list, and only that pump can fill it. A police pump must hold the litres asked for. A request
+is open (ISSUED) until it is filled, cancelled or expired. A vehicle has at most one open request.
 Open requests do not hold back any of the month's fuel; only litres actually filled count against the quota.
 
 After a fill the driver enters the duty particulars, and the MTO allows an emergency fill (which `fuel.quota` already
@@ -25,7 +25,7 @@ from fleet.services import current_links, current_vehicle_for
 from fuel.models import EmergencyStatus, FuelRequest, RequestStatus
 from fuel.quota import ZERO, fmt, quota_for
 from notifications.service import notify
-from pumps.models import Pump
+from pumps.models import Pump, PumpKind
 
 
 def new_pin() -> str:
@@ -85,8 +85,18 @@ def create_request(
         raise BusinessRuleError(f"The tank holds only {fmt(vehicle.tank_capacity_litres)} L.")
     if not pump.is_active:
         raise BusinessRuleError(f"{pump.name} is closed. Pick another pump.")
+    fuel = vehicle.fuel_type.lower()
     if not pump.sells(vehicle.fuel_type):
-        raise BusinessRuleError(f"{pump.name} does not sell {vehicle.fuel_type.lower()}. Pick another pump.")
+        raise BusinessRuleError(f"{pump.name} does not sell {fuel}. Pick another pump.")
+    if pump.kind == PumpKind.POLICE:  # a tie-up bunk keeps no stock in the system
+        tank = pump.tanks.filter(fuel_type=vehicle.fuel_type).first()
+        in_stock = tank.current_stock_litres if tank else ZERO
+        if in_stock <= 0:
+            raise BusinessRuleError(f"{pump.name} has no {fuel} in stock. Pick another pump.")
+        if litres > in_stock:
+            raise BusinessRuleError(
+                f"{pump.name} has only {fmt(in_stock)} L of {fuel}. Ask for less or pick another pump."
+            )
 
     expire_stale(vehicle)
     # The caller is the vehicle's only current driver, so an open request of anyone else is left over from a handover

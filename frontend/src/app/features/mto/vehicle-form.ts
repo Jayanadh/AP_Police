@@ -21,6 +21,7 @@ import {
   VehiclesApi,
   VehicleType,
 } from '../../core/api/vehicles-api';
+import { NumberField } from '../../ui/number-field';
 
 const INCOMPLETE =
   'Fill in the registration number, type, make, model, fuel type, tank capacity and monthly fuel limit.';
@@ -28,7 +29,7 @@ const INCOMPLETE =
 /** Adds a vehicle, or changes one. The page decides what happens after it is saved. */
 @Component({
   selector: 'app-vehicle-form',
-  imports: [ReactiveFormsModule],
+  imports: [NumberField, ReactiveFormsModule],
   templateUrl: './vehicle-form.html',
   styles: `
     :host {

@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { FuelRequest, FuelRequestsApi } from '../../core/api/fuel-requests-api';
+import { FuelRequest, FuelRequestsApi, PumpFill } from '../../core/api/fuel-requests-api';
 import {
   FUEL_STATEMENT_EXPORT,
   FuelStatement,
@@ -36,9 +36,10 @@ const SUBTITLES: Record<Role, string> = {
 };
 
 /**
- * The fuel statement of any period, for every role: totals, then per office (PTO), per vehicle, per pump and, at a
- * police pump, each tank's stock, then the fills themselves. The PTO sees vehicles and fills once an office is
- * picked; the MTO can narrow the fills to one vehicle.
+ * The fuel statement of any period, for every role: totals, then per office (PTO), per vehicle (MTO), per pump and,
+ * at a police pump, each tank's stock, then the fills themselves. The PTO sees vehicles and fills once an office is
+ * picked; the MTO can narrow the fills to one vehicle. Officers and drivers see their own vehicles' fills, so no
+ * vehicle numbers or fuel split; pump staff see one table of the fills at the pump, with the officer of each vehicle.
  */
 @Component({
   selector: 'app-fuel-statement-page',
@@ -67,6 +68,11 @@ export class FuelStatementPage {
   protected readonly isPto = computed(() => this.auth.role() === 'PTO');
   protected readonly isMto = computed(() => this.auth.role() === 'MTO');
   protected readonly atPump = computed(() => this.auth.role() === 'PUMP_OPERATOR');
+  /** An officer or a driver: the statement is of their own vehicles. */
+  protected readonly personal = computed(() => {
+    const role = this.auth.role();
+    return role === 'OFFICER' || role === 'DRIVER';
+  });
   protected readonly subtitle = computed(() => {
     const user = this.auth.user();
     if (user?.role === 'PUMP_OPERATOR' && user.pump_kind === 'POLICE') {
@@ -87,9 +93,6 @@ export class FuelStatementPage {
   );
   protected readonly fills = new Panel<FuelRequest[]>(() => {
     const { from, to } = this.period();
-    if (this.atPump()) {
-      return this.requests.pumpFills({ from, to });
-    }
     return this.requests.list({
       from,
       to,
@@ -98,6 +101,30 @@ export class FuelStatementPage {
       vehicle: this.vehicleId() ?? undefined,
     });
   });
+
+  /** At a pump: every fill made there in the period, and the words to find some by. */
+  protected readonly pumpFills = new Panel<PumpFill[]>(() =>
+    this.requests.pumpFills(this.period()),
+  );
+  protected readonly search = signal('');
+  protected readonly shownPumpFills = computed(() => {
+    const words = this.search().trim().toLowerCase();
+    const fills = this.pumpFills.data() ?? [];
+    if (!words) {
+      return fills;
+    }
+    const registration = words.replace(/[^a-z0-9]/g, '');
+    return fills.filter(
+      (fill) =>
+        (registration && fill.registration_number.toLowerCase().includes(registration)) ||
+        (fill.officer_name ?? '').toLowerCase().includes(words),
+    );
+  });
+  /** An officer's or a driver's fills name the vehicle only when they are of more than one. */
+  protected readonly showVehicle = computed(
+    () =>
+      !this.personal() || new Set((this.fills.data() ?? []).map((fill) => fill.vehicle)).size > 1,
+  );
 
   /** The Excel file of the statement on screen: its period and, for the PTO, its office. */
   protected readonly downloadParams = computed(() => ({
@@ -143,7 +170,9 @@ export class FuelStatementPage {
   }
 
   private loadFills(): void {
-    if (this.showFills()) {
+    if (this.atPump()) {
+      this.pumpFills.load();
+    } else if (this.showFills()) {
       this.fills.load();
     } else {
       this.fills.reset();

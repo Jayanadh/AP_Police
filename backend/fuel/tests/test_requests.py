@@ -20,6 +20,7 @@ from testing.factories import (
     UnitFactory,
     VehicleFactory,
     filled_request,
+    police_pump,
     tieup_pump,
 )
 
@@ -164,6 +165,29 @@ def test_a_pump_that_does_not_sell_the_vehicles_fuel_is_refused(vehicle, driver)
 
     assert vehicle.fuel_type == "DIESEL"
     assert refusal(driver, "20", pump=petrol_only) == "Krishna Fuel Point does not sell diesel. Pick another pump."
+
+
+def test_a_police_pump_without_the_fuel_in_stock_is_refused(driver):
+    empty = police_pump(driver.unit, petrol=Decimal("500"), diesel=Decimal("0"))
+    empty.name = "Nellore DPO Police Pump"
+    empty.save()
+
+    assert refusal(driver, "20", pump=empty) == "Nellore DPO Police Pump has no diesel in stock. Pick another pump."
+
+
+def test_a_police_pump_holding_less_than_asked_for_is_refused_with_what_it_holds(driver):
+    low = police_pump(driver.unit, diesel=Decimal("12.5"))
+    low.name = "Kavali Police Pump"
+    low.save()
+
+    assert refusal(driver, "20", pump=low) == (
+        "Kavali Police Pump has only 12.50 L of diesel. Ask for less or pick another pump."
+    )
+    assert ask(driver, "12.5", pump=low).litres_requested == Decimal("12.5")
+
+
+def test_a_tie_up_bunk_keeps_no_stock_so_its_stock_is_never_checked(driver):
+    assert ask(driver, "40", pump=tieup_pump(driver.unit)).litres_requested == Decimal("40")
 
 
 def test_a_request_within_the_limit_gets_a_pin_for_24_hours(vehicle, driver):

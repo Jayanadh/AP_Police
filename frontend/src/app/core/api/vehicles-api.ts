@@ -104,9 +104,15 @@ export type Assignment = {
   ended_by_name: string | null;
 };
 
+/** A vehicle as its officer or driver sees it. */
+export type MyVehicle = Vehicle & {
+  /** The lowest odometer reading it may take next: the highest on record. */
+  latest_odometer_km: number;
+};
+
 /** The vehicles of a signed-in officer or driver, and who to call at their MTO office. */
 export type MyVehicles = {
-  vehicles: Vehicle[];
+  vehicles: MyVehicle[];
   mto: { unit_name: string; full_name: string | null; mobile: string | null };
 };
 

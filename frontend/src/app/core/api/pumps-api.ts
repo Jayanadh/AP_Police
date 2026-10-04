@@ -15,6 +15,8 @@ export type PumpTank = {
   /** Null until the MTO sets the tank's size. */
   capacity_litres: string | null;
   is_low: boolean;
+  /** Whether anything was recorded for the tank yet. Until then the MTO may set its opening stock, once. */
+  opening_set: boolean;
 };
 
 /** A pump of the MTO's own office. Latitude and longitude arrive as strings. */
@@ -38,12 +40,14 @@ export type Pump = {
   staff_count: number;
 };
 
-/** What the MTO sends to add or change a pump. Whether it is active is changed with activate/deactivate. */
+/**
+ * What the MTO sends to add or change a pump. Its district is the MTO office's, set by the server; whether it is
+ * active is changed with activate/deactivate.
+ */
 export type PumpPayload = {
   name: string;
   kind: PumpKind;
   address: string;
-  district: number;
   latitude: number;
   longitude: number;
   opening_hours: string;

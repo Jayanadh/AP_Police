@@ -1,7 +1,7 @@
 from django.contrib.auth import password_validation
 from rest_framework import serializers
 
-from accounts.models import User
+from accounts.models import DeviceToken, User
 
 
 class MeSerializer(serializers.ModelSerializer):
@@ -25,6 +25,19 @@ class MeSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField(trim_whitespace=False)
+
+
+class DeviceSignInSerializer(LoginSerializer):
+    device_name = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
+
+
+class DeviceTokenSerializer(serializers.ModelSerializer):
+    user = MeSerializer(read_only=True)
+
+    class Meta:
+        model = DeviceToken
+        fields = ["expires_at", "user"]
+        read_only_fields = fields
 
 
 class ChangePasswordSerializer(serializers.Serializer):

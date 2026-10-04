@@ -5,12 +5,12 @@ import { Title } from '@angular/platform-browser';
 import { provideRouter, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { GeoService } from '../../core/geo';
-import { makeFuelStatement, makeMe, makeVehicle, signInAs } from '../../core/test-data';
+import { makeFuelStatement, makeMe, makeMyVehicle, signInAs } from '../../core/test-data';
 import { NEVER_LOADING_LEAFLET } from '../../ui/testing/leaflet-stub';
 import { DRIVER_ROUTES } from './driver.routes';
 
 const MINE = {
-  vehicles: [makeVehicle()],
+  vehicles: [makeMyVehicle()],
   mto: { unit_name: 'MTO Nellore', full_name: 'Ravi Kumar', mobile: '9876543210' },
 };
 
@@ -72,7 +72,10 @@ describe('Driver routes', () => {
   it('/driver/pumps is the pump finder', async () => {
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl('/driver/pumps');
-    TestBed.inject(HttpTestingController).expectOne('/api/pump-directory/').flush([PUMP]);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/me/vehicles/').flush(MINE);
+    await harness.fixture.whenStable();
+    http.expectOne('/api/pump-directory/?fuel=DIESEL').flush([PUMP]);
     await harness.fixture.whenStable();
     const el = harness.fixture.nativeElement as HTMLElement;
     expect(el.querySelector('app-pump-finder-page h1')?.textContent?.trim()).toBe(
@@ -119,6 +122,18 @@ describe('Driver routes', () => {
     expect(el.querySelector('app-driver-fuel-page h1')?.textContent?.trim()).toBe('Fuel');
     expect(el.querySelector<HTMLSelectElement>('#fuel-pump')?.value).toBe(String(PUMP.id));
     expect(title()).toBe('Fuel');
+  });
+
+  it('/driver/live is the live location page', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/driver/live');
+    TestBed.inject(HttpTestingController).expectOne('/api/me/vehicles/').flush(MINE);
+    await harness.fixture.whenStable();
+    const el = harness.fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-live-location-page h1')?.textContent?.trim()).toBe(
+      'Live location',
+    );
+    expect(title()).toBe('Live location');
   });
 
   it('/driver/odometer is the odometer page', async () => {

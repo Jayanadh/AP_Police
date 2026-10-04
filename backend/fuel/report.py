@@ -1,18 +1,19 @@
 """Fuel statements: what was filled in a period, as the person asking sees it. Bunk statements: what was filled at
 one pump in a period, for its staff, its office's MTO and the PTO.
 
-Everyone gets the totals. The MTO, officers and drivers also get a row per vehicle and per pump; the PTO a row per
-office, and the rows per vehicle only once one office is picked (the whole state at once would be thousands of
-rows); the staff of a pump a row per vehicle filled there and, at a police pump, how each tank's stock moved.
+Everyone gets the totals. The MTO also gets a row per vehicle and per pump; officers and drivers a row per pump (their
+fills are of their own vehicles); the PTO a row per office, and the rows per vehicle only once one office is picked
+(the whole state at once would be thousands of rows); the staff of a pump, at a police pump, how each tank's stock
+moved, and their fills as one list (see `pump_fills`).
 """
 from decimal import Decimal
 
-from django.db.models import Count, F, Q, QuerySet, Sum
+from django.db.models import Count, F, OuterRef, Q, QuerySet, Subquery, Sum
 from rest_framework import serializers
 
 from accounts.models import Role, Unit
 from common.periods import Period
-from fleet.models import FuelType
+from fleet.models import AssignmentKind, FuelType, VehicleAssignment
 from fleet.services import vehicles_visible_to
 from fuel.models import FuelRequest, RequestStatus
 from fuel.quota import fmt
@@ -29,11 +30,12 @@ def fuel_statement(user, period: Period, unit_id: int | None = None) -> dict:
     fills = statement_fills(user, period, unit_id)
     is_pto = user.role == Role.PTO
     at_pump = user.role == Role.PUMP_OPERATOR
+    per_vehicle = user.role == Role.MTO or (is_pto and unit_id is not None)
     return {
         **_period(period),
         **totals(fills),
         "by_unit": _by_unit(start, end) if is_pto else None,
-        "by_vehicle": None if is_pto and unit_id is None else _by_vehicle(fills),
+        "by_vehicle": _by_vehicle(fills) if per_vehicle else None,
         "by_pump": None if at_pump else _by_pump(fills),
         "stock": _stock(user.pump, period) if at_pump and _is_police(user.pump) else None,
     }
@@ -48,6 +50,26 @@ def statement_fills(user, period: Period, unit_id: int | None = None) -> QuerySe
         .select_related("vehicle__unit", "driver", "pump")
         .order_by("filled_at", "id")
     )
+
+
+def pump_fills(pump_id: int | None, period: Period) -> QuerySet[FuelRequest]:
+    """The fills made at a pump in `period`, newest first, each with `officer_name`: the officer the vehicle was
+    linked to when it was filled (None when it had none)."""
+    start, end = period.bounds()
+    return (
+        FuelRequest.objects.filter(status=RequestStatus.FILLED, pump=pump_id, filled_at__gte=start, filled_at__lt=end)
+        .select_related("vehicle", "driver")
+        .annotate(officer_name=officer_at_fill())
+        .order_by("-filled_at", "-id")
+    )
+
+
+def officer_at_fill() -> Subquery:
+    """The name of the officer a fill's vehicle was linked to at the moment of the fill."""
+    links = VehicleAssignment.objects.filter(
+        vehicle=OuterRef("vehicle"), kind=AssignmentKind.OFFICER, started_at__lte=OuterRef("filled_at")
+    ).filter(Q(ended_at__isnull=True) | Q(ended_at__gt=OuterRef("filled_at")))
+    return Subquery(links.order_by("-started_at").values("person__full_name")[:1])
 
 
 def bunk_statement(pump: Pump, period: Period) -> dict:
@@ -205,7 +227,8 @@ def _is_police(pump: Pump | None) -> bool:
 
 
 def _stock(pump: Pump, period: Period) -> list[dict]:
-    """How each tank's stock moved: opening + received - dispensed + what morning measurements changed = closing."""
+    """How each tank's stock moved: opening + received - dispensed = closing. A tank's opening stock, set when its pump
+    joined, counts as received in the period it was set."""
     start, end = period.bounds()
     out = []
     for tank in pump.tanks.order_by("id"):
@@ -227,15 +250,14 @@ def _stock(pump: Pump, period: Period) -> list[dict]:
         moved = entries.aggregate(
             received=Sum("litres", filter=Q(kind=StockEntryKind.TANKER_RECEIPT)),
             dispensed=Sum("litres", filter=Q(kind=StockEntryKind.DISPENSE)),
-            measured=Sum(F("stock_after") - F("stock_before"), filter=Q(kind=StockEntryKind.MEASUREMENT)),
+            opened=Sum(F("stock_after") - F("stock_before"), filter=Q(kind=StockEntryKind.OPENING)),
         )
         out.append(
             {
                 "fuel_type": tank.fuel_type,
                 "opening_litres": fmt(opening),
-                "received_litres": fmt(moved["received"] or ZERO),
+                "received_litres": fmt((moved["received"] or ZERO) + (moved["opened"] or ZERO)),
                 "dispensed_litres": fmt(moved["dispensed"] or ZERO),
-                "measured_change_litres": fmt(moved["measured"] or ZERO),
                 "closing_litres": fmt(closing),
             }
         )

@@ -14,7 +14,7 @@
       <a class="btn-icon back" routerLink="/driver/pumps" aria-label="Back to pumps">
         <app-icon name="chevron-left" [size]="24" />
       </a>
-      <app-hero-illustration />
+      <app-fuel-flow-scene />
     </div>
 
     <section class="panel" aria-labelledby="pump-name">
@@ -46,23 +46,36 @@
       </div>
 
       <div class="stats">
-        <app-stat-card icon="map-pin" label="Distance" [value]="distance()" />
-        <app-stat-card icon="clock" label="Opening" [value]="pump.opening_hours || '—'" />
+        <app-stat-card icon="map-pin" label="Distance" tone="info" [value]="distance()" />
+        <app-stat-card
+          icon="clock"
+          label="Opening"
+          tone="violet"
+          [value]="pump.opening_hours || '—'"
+        />
       </div>
 
-      <h2 class="label">Available fuel</h2>
-      <ul class="fuel-chips">
-        @for (fuel of fuels(); track fuel.value) {
-          <li class="chip" [class.active]="fuel.available" [class.unavailable]="!fuel.available">
-            {{ fuel.label }}
-            <span class="sr-only">{{ fuel.available ? 'available' : 'not available' }}</span>
-          </li>
-        }
-      </ul>
-      @if (missingFuel(); as missing) {
+      @if (pump.kind === 'POLICE') {
+        <h2 class="label fuels-title">Fuel in stock</h2>
+        <ul class="fuel-chips">
+          @for (fuel of fuels(); track fuel.value) {
+            <li class="chip" [class.active]="fuel.inStock" [class.unavailable]="!fuel.inStock">
+              {{ fuel.label }} {{ fuel.inStock ? 'in stock' : 'out of stock' }}
+            </li>
+          }
+        </ul>
+      } @else {
+        <h2 class="label fuels-title">Fuels sold</h2>
+        <ul class="fuel-chips">
+          @for (fuel of fuels(); track fuel.value) {
+            <li class="chip active">{{ fuel.label }}</li>
+          }
+        </ul>
+      }
+      @if (cannotFill(); as reason) {
         <p class="fuel-warning" role="note">
           <app-icon name="alert-triangle" [size]="16" />
-          {{ missing }} is not available here right now.
+          {{ reason }}
         </p>
       }
 
@@ -75,7 +88,9 @@
             <p class="muted">You are not linked to a vehicle yet.</p>
           }
         </div>
-        @if (!noVehicle()) {
+        @if (cannotFill()) {
+          <a class="btn btn-secondary fill-up" routerLink="/driver/pumps">Other pumps</a>
+        } @else if (!noVehicle()) {
           <a
             class="btn btn-primary fill-up"
             routerLink="/driver/fuel"

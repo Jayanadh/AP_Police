@@ -70,6 +70,15 @@
               </button>
               <button
                 type="button"
+                class="btn-icon delete"
+                [attr.aria-label]="'Delete ' + item.name"
+                [disabled]="busyId() === item.id"
+                (click)="remove(item)"
+              >
+                <app-icon name="trash" [size]="16" />
+              </button>
+              <button
+                type="button"
                 role="switch"
                 class="chip toggle"
                 [class.active]="item.is_active"

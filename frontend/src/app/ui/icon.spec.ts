@@ -41,6 +41,8 @@ const REQUIRED_NAMES = [
   'locate',
   'minus',
   'phone',
+  'radio',
+  'map',
 ];
 
 async function render(name: string, size?: number) {

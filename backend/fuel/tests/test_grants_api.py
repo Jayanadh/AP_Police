@@ -48,7 +48,12 @@ def vehicle(mto):
 
 
 # How each kind of letter file starts, so a test letter is a real one of its kind.
-SIGNATURES = {".pdf": b"%PDF-1.4 ", ".png": b"\x89PNG\r\n\x1a\n", ".jpg": b"\xff\xd8\xff\xe0", ".jpeg": b"\xff\xd8\xff\xe0"}
+SIGNATURES = {
+    ".pdf": b"%PDF-1.4 ",
+    ".png": b"\x89PNG\r\n\x1a\n",
+    ".jpg": b"\xff\xd8\xff\xe0",
+    ".jpeg": b"\xff\xd8\xff\xe0",
+}
 
 
 def pdf(name="approval.pdf", size=None, body=None):

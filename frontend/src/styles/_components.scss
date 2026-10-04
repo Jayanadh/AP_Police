@@ -421,14 +421,35 @@
 
 // ------------------------------------------------- stats, lists, tables
 // <div class="stat"><span class="stat-icon"><app-icon …/></span><div><div class="stat-label">…</div><div class="stat-value">…</div></div></div>
+// Stat tiles: a white card washed with the tile's colour, a coloured edge and a solid icon badge, so each figure
+// stands out and still reads easily. --tone is the tile's colour; the glyph on the badge is white unless noted.
 .stat {
+  --tone: #5468e7;
+  --on-tone: #ffffff;
+
+  position: relative;
   display: flex;
   align-items: center;
   gap: 14px;
   min-width: 0;
-  padding: 16px;
+  padding: 16px 18px 16px 20px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--tone) 22%, var(--border));
   border-radius: var(--radius-md);
-  background: var(--surface-2);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--tone) 13%, var(--surface)) 0%,
+    var(--surface) 70%
+  );
+  box-shadow: var(--shadow-card);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 5px;
+    background: var(--tone);
+  }
 }
 
 .stat-icon {
@@ -436,39 +457,62 @@
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--text);
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: var(--tone);
+  color: var(--on-tone);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--tone) 32%, transparent);
+}
+
+// Lets the words wrap rather than run out of a narrow tile.
+.stat-text {
+  min-width: 0;
 }
 
 .stat-label {
   color: var(--muted);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .stat-value {
-  font-size: 18px;
-  font-weight: 700;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 800;
   letter-spacing: -0.02em;
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
 
-.stat-primary .stat-icon {
-  background: color-mix(in srgb, var(--primary) 22%, white);
-  color: var(--primary-strong);
+.stat-primary {
+  --tone: var(--primary);
+  --on-tone: var(--on-primary);
 }
 
-.stat-warning .stat-icon {
-  background: color-mix(in srgb, var(--warning) 20%, white);
-  color: color-mix(in srgb, var(--warning) 80%, black);
+.stat-success {
+  --tone: #23915c;
 }
 
-.stat-danger .stat-icon {
-  background: color-mix(in srgb, var(--danger) 14%, white);
-  color: var(--danger);
+.stat-info {
+  --tone: var(--info);
+}
+
+.stat-violet {
+  --tone: #8257e6;
+}
+
+.stat-teal {
+  --tone: #0f8f87;
+}
+
+.stat-warning {
+  --tone: var(--warning);
+  --on-tone: #1c1c1e;
+}
+
+.stat-danger {
+  --tone: var(--danger);
 }
 
 .list {

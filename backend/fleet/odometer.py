@@ -3,11 +3,12 @@ from datetime import date, timedelta
 
 from django.db import transaction
 from django.db.models import OuterRef, QuerySet, Subquery
+from django.db.models.functions import Coalesce, Greatest
 
 from accounts.models import User
 from common.exceptions import BusinessRuleError
 from common.months import today_ist
-from fleet.models import AssignmentKind, OdometerReading, Vehicle, VehicleAssignment, VehicleStatus
+from fleet.models import AssignmentKind, OdometerReading, ServiceRecord, Vehicle, VehicleAssignment, VehicleStatus
 from fleet.services import current_vehicle_for
 
 NOT_LINKED_MESSAGE = "You are not linked to a vehicle. Contact your MTO."
@@ -23,6 +24,20 @@ def latest_odometer_km(vehicle: Vehicle) -> int:
     newest_reading = vehicle.odometer_readings.values_list("reading_km", flat=True).first()
     newest_service = vehicle.service_records.values_list("odometer_km", flat=True).first()
     return max(vehicle.odometer_at_onboarding_km, newest_reading or 0, newest_service or 0)
+
+
+def with_latest_odometer_km(vehicles: QuerySet[Vehicle]) -> QuerySet[Vehicle]:
+    """`vehicles`, each carrying `latest_odometer_km` (see `latest_odometer_km`) worked out in the same query: the
+    lowest reading a driver may enter next."""
+    newest_reading = OdometerReading.objects.filter(vehicle=OuterRef("pk")).values("reading_km")[:1]
+    newest_service = ServiceRecord.objects.filter(vehicle=OuterRef("pk")).values("odometer_km")[:1]
+    return vehicles.annotate(
+        latest_odometer_km=Greatest(
+            "odometer_at_onboarding_km",
+            Coalesce(Subquery(newest_reading), 0),
+            Coalesce(Subquery(newest_service), 0),
+        )
+    )
 
 
 def missing_readings(unit_id: int, week: date) -> QuerySet[VehicleAssignment]:

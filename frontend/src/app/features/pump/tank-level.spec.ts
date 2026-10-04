@@ -41,11 +41,4 @@ describe('TankLevel', () => {
     expect(el.querySelector('.badge')).toBeNull();
     expect(el.querySelector('.progress.danger')).toBeNull();
   });
-
-  it('says when the stock was last measured, or that it never was', () => {
-    expect(setup({ last_measured_at: '2026-10-03T07:10:00+05:30' }).text('.measured')).toBe(
-      'Measured 03 Oct 2026, 7:10 am',
-    );
-    expect(setup({ last_measured_at: null }).text('.measured')).toBe('Not measured yet');
-  });
 });

@@ -1,11 +1,13 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, UrlTree } from '@angular/router';
 import { AuthStore, Me } from '../core/auth-store';
 import { NotificationsApi } from '../core/api/notifications-api';
+import { LiveLocation, SharingState } from '../core/live-location';
 import { makeMe, signInAs } from '../core/test-data';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { ToastService } from '../ui/toast';
 import { Shell, UNREAD_POLL_MS } from './shell';
 
@@ -15,12 +17,17 @@ const UNREAD_URL = '/api/notifications/unread-count/';
 class Blank {}
 
 describe('Shell', () => {
+  /** Whether the signed-in driver is sharing their live location (the service is tested on its own). */
+  let sharing: ReturnType<typeof signal<SharingState>>;
+
   beforeEach(() => {
+    sharing = signal<SharingState>('off');
     TestBed.configureTestingModule({
       providers: [
         provideRouter([{ path: '**', component: Blank }]),
         provideHttpClient(),
         provideHttpClientTesting(),
+        { provide: LiveLocation, useValue: { state: sharing } },
       ],
     });
   });
@@ -57,6 +64,7 @@ describe('Shell', () => {
       expect(texts(el.querySelectorAll('.side-nav a'))).toEqual([
         'Dashboard',
         'Vehicles',
+        'Live tracking',
         'Drivers',
         'Officers',
         'Transfers',
@@ -81,8 +89,8 @@ describe('Shell', () => {
       expect(labels(el, '.bottom-nav a, .bottom-nav button')).toEqual([
         'Dashboard',
         'Vehicles',
+        'Live tracking',
         'Emergencies',
-        'Fuel statement',
         'More',
       ]);
     });
@@ -94,6 +102,30 @@ describe('Shell', () => {
         'Fuel statement',
         'More',
       ]);
+    });
+
+    it("puts the driver's Live location in the bottom bar", async () => {
+      const { el } = await setup(makeMe({ role: 'DRIVER' }));
+      expect(labels(el, '.bottom-nav a, .bottom-nav button')).toEqual([
+        'Home',
+        'Pumps',
+        'Fuel',
+        'Live location',
+        'More',
+      ]);
+    });
+
+    it('shows a Live sign at the top while the driver shares their location', async () => {
+      const { fixture, el } = await setup(makeMe({ role: 'DRIVER' }));
+      expect(el.querySelector('.live-pill')).toBeNull();
+
+      sharing.set('on');
+      await fixture.whenStable();
+
+      const pill = el.querySelector<HTMLAnchorElement>('.top-actions a.live-pill')!;
+      expect(pill.textContent?.trim()).toBe('Live');
+      expect(pill.getAttribute('href')).toBe('/driver/live');
+      expect(pill.getAttribute('aria-label')).toBe('Sharing live location');
     });
 
     it('has neither Alerts nor Profile in the sidebar', async () => {
@@ -148,7 +180,7 @@ describe('Shell', () => {
       await fixture.whenStable();
       const sheet = el.querySelector('.sheet') as HTMLElement;
       expect(sheet.getAttribute('role')).toBe('dialog');
-      expect(texts(sheet.querySelectorAll('a.more-link'))).toHaveLength(12);
+      expect(texts(sheet.querySelectorAll('a.more-link'))).toHaveLength(13);
       expect(texts(sheet.querySelectorAll('a.more-link'))).toContain('Additional quota');
       expect(sheet.querySelector('button.logout')?.textContent).toContain('Log out');
       expect(more(el).getAttribute('aria-expanded')).toBe('true');
@@ -314,10 +346,21 @@ describe('Shell', () => {
   });
 
   describe('Log out', () => {
-    it('calls the API, forgets the user and goes to /login', async () => {
+    /** Answers the question Log out asks, and returns it. */
+    async function answer(yes: boolean) {
+      const question = TestBed.inject(ConfirmDialog).open();
+      expect(question?.title).toBe('Log out?');
+      question!.answer(yes);
+      await new Promise((resolve) => setTimeout(resolve));
+      return question!;
+    }
+
+    it('asks first, then calls the API, forgets the user and goes to /login', async () => {
       const { fixture, el, http } = await setup();
       const urls = recordNavigation();
       (el.querySelector('.side-user button.logout') as HTMLButtonElement).click();
+      const question = await answer(true);
+      expect(question.message).toBe('You will need your login ID and password to come back in.');
       const req = http.expectOne('/api/auth/logout/');
       expect(req.request.method).toBe('POST');
       req.flush(null, { status: 204, statusText: 'No Content' });
@@ -332,6 +375,7 @@ describe('Shell', () => {
       (el.querySelector('.more-button') as HTMLButtonElement).click();
       await fixture.whenStable();
       (el.querySelector('.sheet button.logout') as HTMLButtonElement).click();
+      await answer(true);
       http.expectOne('/api/auth/logout/').flush(null, { status: 204, statusText: 'No Content' });
       await fixture.whenStable();
       expect(urls).toEqual(['/login']);
@@ -341,6 +385,7 @@ describe('Shell', () => {
       const { fixture, el, http } = await setup();
       const urls = recordNavigation();
       (el.querySelector('.side-user button.logout') as HTMLButtonElement).click();
+      await answer(true);
       http.expectOne('/api/auth/logout/').error(new ProgressEvent('error'), { status: 0 });
       await fixture.whenStable();
       expect(TestBed.inject(AuthStore).user()).not.toBeNull();
@@ -348,6 +393,22 @@ describe('Shell', () => {
       const toast = TestBed.inject(ToastService).messages()[0];
       expect(toast.tone).toBe('danger');
       expect(toast.text).toBe('Cannot reach the server. Check your connection.');
+    });
+
+    it('stays signed in when the question is cancelled', async () => {
+      const { el, http } = await setup();
+      (el.querySelector('.side-user button.logout') as HTMLButtonElement).click();
+      await answer(false);
+      http.expectNone('/api/auth/logout/');
+      expect(TestBed.inject(AuthStore).user()).not.toBeNull();
+    });
+
+    it('tells a driver who is sharing that their live location stops too', async () => {
+      const { el } = await setup(makeMe({ role: 'DRIVER' }));
+      sharing.set('on');
+      (el.querySelector('.side-user button.logout') as HTMLButtonElement).click();
+      const question = await answer(false);
+      expect(question.message).toBe('Sharing your live location stops too.');
     });
   });
 });

@@ -6,6 +6,7 @@ from django.test.utils import CaptureQueriesContext
 
 from fleet.models import FuelType
 from masters.models import District
+from pumps import stock
 from pumps.models import Pump, PumpKind, PumpTank
 from testing.factories import (
     DriverFactory,
@@ -13,6 +14,7 @@ from testing.factories import (
     PumpFactory,
     PumpStaffFactory,
     UnitFactory,
+    master,
     police_pump,
     tieup_pump,
 )
@@ -36,7 +38,6 @@ def pump_payload(**overrides):
         "name": "Nellore DPO Police Pump",
         "kind": "POLICE",
         "address": "DPO Campus, Nellore",
-        "district": District.objects.get(name="Sri Potti Sriramulu Nellore").id,
         "latitude": "14.442600",
         "longitude": "79.986500",
         "opening_hours": "6 AM - 10 PM",
@@ -70,6 +71,25 @@ def test_creating_a_police_pump_creates_petrol_and_diesel_tanks_at_100_litres(mt
         ("PETROL", Decimal("100")),
         ("DIESEL", Decimal("100")),
     }
+
+
+def test_a_new_pump_is_in_the_district_of_the_mtos_office(api):
+    guntur = MTOFactory(unit=UnitFactory(district=master(District, "Guntur")))
+    api.force_login(guntur)
+
+    body = api.post("/api/pumps/", pump_payload(address="Police Lines, Guntur")).json()
+
+    assert body["district_name"] == "Guntur"
+    assert Pump.objects.get(pk=body["id"]).district == guntur.unit.district
+
+
+def test_the_district_is_never_taken_from_the_client(mto_api, mto):
+    elsewhere = master(District, "Krishna")
+
+    created = mto_api.post("/api/pumps/", pump_payload(district=elsewhere.id)).json()
+    patched = mto_api.patch(f"/api/pumps/{created['id']}/", {"district": elsewhere.id}).json()
+
+    assert created["district_name"] == patched["district_name"] == mto.unit.district.name
 
 
 def test_a_tie_up_bunk_has_no_tanks(mto_api):
@@ -232,7 +252,19 @@ def test_detail_shows_tanks_with_low_stock_flags(mto_api, mto):
     assert tanks["DIESEL"]["is_low"] is True
     assert set(tanks["DIESEL"]) == {
         "id", "fuel_type", "current_stock_litres", "low_stock_threshold_litres", "capacity_litres", "is_low",
+        "opening_set",
     }
+
+
+def test_each_tank_says_whether_its_opening_stock_is_set(mto_api, mto):
+    pump = police_pump(mto.unit)
+    diesel = pump.tanks.get(fuel_type="DIESEL")
+    stock.record_opening(diesel, Decimal("400"), mto)
+
+    for url in (f"/api/pumps/{pump.id}/", "/api/pumps/"):
+        body = mto_api.get(url).json()
+        tanks = (body if isinstance(body, dict) else body[0])["tanks"]
+        assert {tank["fuel_type"]: tank["opening_set"] for tank in tanks} == {"PETROL": False, "DIESEL": True}
 
 
 def test_deactivate_and_activate(mto_api, mto):

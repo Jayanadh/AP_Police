@@ -16,6 +16,7 @@ const tank = (overrides: Partial<PumpTank> = {}): PumpTank => ({
   low_stock_threshold_litres: '100.00',
   capacity_litres: '1000.00',
   is_low: false,
+  opening_set: true,
   ...overrides,
 });
 
@@ -219,7 +220,6 @@ describe('PumpsPage', () => {
     s.button('Add pump')!.click();
     await s.fixture.whenStable();
     expect(s.el.querySelector('app-pump-form')).toBeTruthy();
-    s.http.expectOne('/api/masters/districts/?active=1').flush([]);
     await s.fixture.whenStable();
 
     s.fixture.debugElement
@@ -236,7 +236,6 @@ describe('PumpsPage', () => {
     const s = await setup();
     s.button('Add pump')!.click();
     await s.fixture.whenStable();
-    s.http.expectOne('/api/masters/districts/?active=1').flush([]);
     await s.fixture.whenStable();
     s.button('Cancel')!.click();
     await s.fixture.whenStable();

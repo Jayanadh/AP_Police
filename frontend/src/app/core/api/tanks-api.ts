@@ -14,11 +14,11 @@ export type Tank = {
   /** Null until the MTO sets the tank's size. */
   capacity_litres: string | null;
   is_low: boolean;
-  /** When the stock was last set by a morning measurement; null before the first one. */
-  last_measured_at: string | null;
+  /** Whether anything was recorded for the tank yet. Until then the MTO may set its opening stock, once. */
+  opening_set: boolean;
 };
 
-export type StockEntryKind = 'MEASUREMENT' | 'TANKER_RECEIPT' | 'DISPENSE';
+export type StockEntryKind = 'OPENING' | 'TANKER_RECEIPT' | 'DISPENSE';
 
 /** One line of a tank's stock ledger. */
 export type StockEntry = {
@@ -32,6 +32,9 @@ export type StockEntry = {
   recorded_by_name: string;
   recorded_at: string;
 };
+
+/** The pump staff's stock entries of a period as an Excel file: a sheet per fuel (`?from=&to=`). */
+export const STOCK_ENTRIES_EXPORT = '/api/tanks/entries/export/';
 
 /** The only things the MTO may change on a tank. */
 export type TankChanges = Partial<{
@@ -68,8 +71,8 @@ export function tankLevelPercent(tank: TankLevels): number {
 }
 
 /**
- * The tanks of police pumps and their stock ledger. The MTO reads them and sets their alert level;
- * measuring and receiving stock is the pump staff's job.
+ * The tanks of police pumps and their stock ledger. The MTO reads them, sets their alert level and, once, their
+ * opening stock; the pump staff record tanker receipts. Fills take their litres off by themselves.
  */
 @Service()
 export class TanksApi {
@@ -87,9 +90,9 @@ export class TanksApi {
     return this.http.patch<Tank>(`/api/tanks/${id}/`, changes);
   }
 
-  /** The morning measurement: sets the stock. */
-  measure(id: number, litres: number, note: string): Observable<Tank> {
-    return this.http.post<Tank>(`/api/tanks/${id}/measure/`, { litres, note });
+  /** For the MTO: the stock the tank holds when its pump starts using the system. Set once, then never again. */
+  setOpening(id: number, litres: number, note: string): Observable<Tank> {
+    return this.http.post<Tank>(`/api/tanks/${id}/opening/`, { litres, note });
   }
 
   /** A tanker delivery: adds to the stock. */
@@ -100,5 +103,12 @@ export class TanksApi {
   /** The stock entries of one month, "YYYY-MM", newest first. */
   entries(id: number, month: string): Observable<StockEntry[]> {
     return this.http.get<StockEntry[]>(`/api/tanks/${id}/entries/?month=${month}`);
+  }
+
+  /** The stock entries of a period ("YYYY-MM-DD", both days included), newest first. */
+  entriesIn(id: number, period: { from: string; to: string }): Observable<StockEntry[]> {
+    return this.http.get<StockEntry[]>(`/api/tanks/${id}/entries/`, {
+      params: { from: period.from, to: period.to },
+    });
   }
 }

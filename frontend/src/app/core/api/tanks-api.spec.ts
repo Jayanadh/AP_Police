@@ -12,14 +12,14 @@ const tank = (overrides: Partial<Tank> = {}): Tank => ({
   low_stock_threshold_litres: '100.00',
   capacity_litres: '1000.00',
   is_low: false,
-  last_measured_at: '2026-10-02T06:30:00+05:30',
+  opening_set: true,
   ...overrides,
 });
 
 const entry = (overrides: Partial<StockEntry> = {}): StockEntry => ({
   id: 1,
-  kind: 'MEASUREMENT',
-  kind_label: 'Morning measurement',
+  kind: 'OPENING',
+  kind_label: 'Opening stock',
   litres: '500.00',
   stock_before: '480.00',
   stock_after: '500.00',
@@ -71,9 +71,9 @@ describe('TanksApi', () => {
     expect(saved!.low_stock_threshold_litres).toBe('150.00');
   });
 
-  it('posts a morning measurement with its note', () => {
-    api.measure(31, 500, 'Dip stick').subscribe();
-    const req = http.expectOne('/api/tanks/31/measure/');
+  it('posts the opening stock with its note', () => {
+    api.setOpening(31, 500, 'Dip stick').subscribe();
+    const req = http.expectOne('/api/tanks/31/opening/');
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ litres: 500, note: 'Dip stick' });
     req.flush(tank());
@@ -93,7 +93,7 @@ describe('TanksApi', () => {
     const req = http.expectOne('/api/tanks/31/entries/?month=2026-10');
     expect(req.request.method).toBe('GET');
     req.flush([entry()]);
-    expect(rows[0].kind_label).toBe('Morning measurement');
+    expect(rows[0].kind_label).toBe('Opening stock');
   });
 
   describe('tankLevelPercent', () => {
@@ -118,5 +118,12 @@ describe('TanksApi', () => {
       expect(tankLevelPercent({ ...bare, current_stock_litres: '5.00' })).toBe(100);
       expect(tankLevelPercent({ ...bare, current_stock_litres: '0.00' })).toBe(0);
     });
+  });
+
+  it('reads the stock entries of a period', () => {
+    api.entriesIn(31, { from: '2026-04-01', to: '2027-03-31' }).subscribe();
+    const req = http.expectOne('/api/tanks/31/entries/?from=2026-04-01&to=2027-03-31');
+    expect(req.request.method).toBe('GET');
+    req.flush([entry()]);
   });
 });

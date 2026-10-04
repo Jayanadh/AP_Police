@@ -1,11 +1,8 @@
 import { Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { DashboardApi, PumpDashboard as PumpSummary } from '../../core/api/dashboard-api';
-import { Tank, TanksApi } from '../../core/api/tanks-api';
-import { fuelLabel } from '../../core/api/vehicles-api';
 import { AuthStore, PumpKind } from '../../core/auth-store';
-import { NOW } from '../../core/clock';
-import { isToday, litres, monthLabel } from '../../core/format';
+import { litres, monthLabel } from '../../core/format';
 import { Panel } from '../../core/panel';
 import { Icon } from '../../ui/icon';
 import { LoadError } from '../../ui/load-error';
@@ -19,15 +16,15 @@ const KIND_LABELS: Readonly<Record<PumpKind, string>> = {
 };
 
 /**
- * The pump staff's home: the vehicles waiting, today's fills, the way to fill a vehicle, and the stock (police pump)
- * or the month's litres (tie-up bunk).
+ * The pump staff's home: the vehicles waiting and today's fills, the way to fill a vehicle under them, and at a police
+ * pump its tanks. Every fill of any period is in the fuel statement.
  */
 @Component({
   selector: 'app-pump-dashboard',
   imports: [Icon, LoadError, PageHeader, RouterLink, StatCard, TankLevel],
   templateUrl: './pump-dashboard.html',
   styles: `
-    // The first thing under the title, and as big as a thumb: filling is what the staff came to do.
+    // Right under the day's figures, and as big as a thumb: filling is what the staff came to do.
     .fill-button {
       width: 100%;
       height: 64px;
@@ -63,27 +60,7 @@ const KIND_LABELS: Readonly<Record<PumpKind, string>> = {
       font-size: 19px;
     }
 
-    .warning-card {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 12px;
-      background: color-mix(in srgb, var(--warning) 14%, white);
-
-      h2,
-      p {
-        margin: 0;
-      }
-    }
-
-    .warning-head {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      color: color-mix(in srgb, var(--warning) 45%, black);
-    }
-
-    // A police pump has only the warning and the tanks, which then share the full width.
+    // A police pump's tanks take the full width.
     .stacked {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -97,12 +74,6 @@ const KIND_LABELS: Readonly<Record<PumpKind, string>> = {
       list-style: none;
     }
 
-    .month {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-
     .more {
       margin-top: 16px;
     }
@@ -110,15 +81,11 @@ const KIND_LABELS: Readonly<Record<PumpKind, string>> = {
 })
 export class PumpDashboard {
   private readonly api = inject(DashboardApi);
-  private readonly tankApi = inject(TanksApi);
   private readonly user = inject(AuthStore).user;
-  private readonly now = inject(NOW);
 
   protected readonly litres = litres;
 
   protected readonly dashboard = new Panel<PumpSummary>(() => this.api.get<PumpSummary>());
-  // The dashboard's own tank rows do not say when a tank was last measured; the tanks list does.
-  protected readonly tanks = new Panel<Tank[]>(() => this.tankApi.list());
 
   protected readonly name = computed(
     () => this.dashboard.data()?.pump.name ?? this.user()?.pump_name ?? 'Dashboard',
@@ -135,17 +102,7 @@ export class PumpDashboard {
     return data ? `Today and ${monthLabel(data.month)}` : '';
   });
 
-  /** The fuels whose tank has no measurement from today, such as "Petrol and Diesel". */
-  protected readonly unmeasured = computed(() =>
-    (this.tanks.data() ?? [])
-      .filter((tank) => !isToday(tank.last_measured_at, this.now()))
-      .map((tank) => fuelLabel(tank.fuel_type)),
-  );
-
   constructor() {
     this.dashboard.load();
-    if (this.user()?.pump_kind === 'POLICE') {
-      this.tanks.load();
-    }
   }
 }

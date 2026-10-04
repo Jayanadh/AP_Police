@@ -41,6 +41,17 @@
         <span>AP Police MTO</span>
       </a>
       <div class="top-actions">
+        @if (sharing()) {
+          <a
+            class="live-pill"
+            routerLink="/driver/live"
+            aria-label="Sharing live location"
+            title="Sharing live location"
+          >
+            <span class="live-dot" aria-hidden="true"></span>
+            Live
+          </a>
+        }
         <a
           class="btn-icon bell"
           routerLink="/alerts"

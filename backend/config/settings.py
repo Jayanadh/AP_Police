@@ -76,6 +76,7 @@ LOCAL_APPS = [
     "pumps",
     "fuel",
     "dashboards",
+    "tracking",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -158,11 +159,25 @@ SESSION_COOKIE_AGE = 60 * 60 * 12
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 
+# Login and location throttling count attempts in the cache, which every gunicorn worker must share: a cache in each
+# worker would let each one allow the full number. So it lives in the database; a migration makes its table.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "mto_cache",
+    }
+}
+
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
+    # The web app signs in with a session; the phone apps with a device token (accounts.device_tokens).
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "accounts.device_tokens.DeviceTokenAuthentication",
+    ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     # Login attempts: per client address, and per login ID however many addresses the attempts come from.
-    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "login_id": "20/hour"},
+    # Location batches: per driver; the app sends one every 15 seconds.
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "login_id": "20/hour", "location": "30/min"},
     "NUM_PROXIES": PROXY_COUNT,
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
 }
@@ -175,4 +190,9 @@ MTO_RULES = {
     "MAX_PIN_ATTEMPTS": 5,
     "DUTY_PARTICULARS_DUE_HOURS": 48,
     "LETTER_MAX_BYTES": 5 * 1024 * 1024,
+    # Live location: a trip with no location for this long is ended; locations are kept this long after a trip.
+    "TRIP_SILENT_HOURS": 12,
+    "LOCATION_KEEP_DAYS": 90,
+    "MAX_POINTS_PER_BATCH": 200,
+    "DEVICE_TOKEN_DAYS": 30,  # how long a phone app stays signed in
 }

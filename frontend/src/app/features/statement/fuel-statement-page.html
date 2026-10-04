@@ -28,15 +28,29 @@
           tone="primary"
           [value]="litres(data.litres)"
         />
-        <app-stat-card icon="droplet" label="Fills" [value]="data.fills" />
-        <app-stat-card icon="droplet" label="Petrol" [value]="litres(data.petrol_litres)" />
-        <app-stat-card icon="droplet" label="Diesel" [value]="litres(data.diesel_litres)" />
-        <app-stat-card
-          icon="alert-triangle"
-          label="Emergency"
-          [tone]="tone(data.emergency_litres)"
-          [value]="litres(data.emergency_litres)"
-        />
+        <app-stat-card icon="fuel" label="Fills" tone="info" [value]="data.fills" />
+        @if (!personal()) {
+          <app-stat-card
+            icon="droplet"
+            label="Petrol"
+            tone="teal"
+            [value]="litres(data.petrol_litres)"
+          />
+          <app-stat-card
+            icon="droplet"
+            label="Diesel"
+            tone="violet"
+            [value]="litres(data.diesel_litres)"
+          />
+        }
+        @if (!atPump()) {
+          <app-stat-card
+            icon="alert-triangle"
+            label="Emergency"
+            [tone]="tone(data.emergency_litres)"
+            [value]="litres(data.emergency_litres)"
+          />
+        }
       </div>
 
       @if (data.by_unit) {
@@ -84,9 +98,6 @@
                 <thead>
                   <tr>
                     <th scope="col">Vehicle</th>
-                    @if (atPump()) {
-                      <th scope="col">Office</th>
-                    }
                     <th scope="col">Fuel</th>
                     <th scope="col">Fills</th>
                     <th scope="col">Litres</th>
@@ -97,9 +108,6 @@
                   @for (row of data.by_vehicle; track row.vehicle) {
                     <tr>
                       <th scope="row">{{ row.registration_number }}</th>
-                      @if (atPump()) {
-                        <td>{{ row.unit_name }}</td>
-                      }
                       <td>{{ fuelLabel(row.fuel_type) }}</td>
                       <td>{{ row.fills }}</td>
                       <td>{{ litres(row.litres) }}</td>
@@ -144,10 +152,7 @@
       @if (data.stock) {
         <section id="stock" class="card" aria-labelledby="stock-title">
           <h2 id="stock-title">Stock</h2>
-          <p class="muted">
-            Opening stock, plus tanker receipts, minus fills, plus what morning measurements
-            corrected.
-          </p>
+          <p class="muted">Opening stock, plus what was received, minus fills.</p>
           <div class="table-wrap">
             <table class="table">
               <thead>
@@ -156,7 +161,6 @@
                   <th scope="col">Opening</th>
                   <th scope="col">Received</th>
                   <th scope="col">Filled</th>
-                  <th scope="col">Measured change</th>
                   <th scope="col">Closing</th>
                 </tr>
               </thead>
@@ -167,7 +171,6 @@
                     <td>{{ litres(row.opening_litres) }}</td>
                     <td>{{ signed(row.received_litres) }}</td>
                     <td>{{ signed(row.dispensed_litres, -1) }}</td>
-                    <td>{{ signed(row.measured_change_litres) }}</td>
                     <td>{{ litres(row.closing_litres) }}</td>
                   </tr>
                 }
@@ -179,7 +182,68 @@
     }
   </section>
 
-  @if (showFills()) {
+  @if (atPump()) {
+    <section id="fills" aria-labelledby="fills-title">
+      <div class="fills-head">
+        <h2 id="fills-title">Fills</h2>
+        <div class="field fills-search">
+          <label for="fills-search">Find a vehicle or officer</label>
+          <input
+            id="fills-search"
+            type="search"
+            autocomplete="off"
+            placeholder="Vehicle number or officer’s name"
+            [value]="search()"
+            (input)="search.set($any($event.target).value)"
+          />
+        </div>
+      </div>
+
+      @if (pumpFills.loading()) {
+        <p class="muted" role="status">Loading fills…</p>
+      } @else if (pumpFills.error()) {
+        <div class="card">
+          <app-load-error [message]="pumpFills.error()" (retry)="pumpFills.load()" />
+        </div>
+      } @else if (!pumpFills.data()?.length) {
+        <div class="card">
+          <app-empty-state
+            icon="fuel"
+            title="No fills in this period."
+            text="Fills show up here once a vehicle fills at this pump."
+          />
+        </div>
+      } @else {
+        <div class="card">
+          <div class="table-wrap">
+            <table id="pump-fills" class="table">
+              <thead>
+                <tr>
+                  <th scope="col">Vehicle</th>
+                  <th scope="col">Litres</th>
+                  <th scope="col">Date and time</th>
+                  <th scope="col">Officer</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (fill of shownPumpFills(); track fill.id) {
+                  <tr>
+                    <th scope="row">{{ fill.registration_number }}</th>
+                    <td>{{ litres(fill.litres_filled) }}</td>
+                    <td>{{ formatDateTime(fill.filled_at) }}</td>
+                    <td>{{ fill.officer_name ?? '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          @if (!shownPumpFills().length) {
+            <p class="muted no-match">No fill matches “{{ search().trim() }}”.</p>
+          }
+        </div>
+      }
+    </section>
+  } @else if (showFills()) {
     <section id="fills" aria-labelledby="fills-title">
       <div class="fills-head">
         <h2 id="fills-title">Fills</h2>
@@ -215,7 +279,7 @@
           />
         </div>
       } @else {
-        @if (overdueText() && !atPump()) {
+        @if (overdueText()) {
           <p class="overdue-note">{{ overdueText() }}</p>
         }
         <ul class="fills">
@@ -223,8 +287,12 @@
             <li class="card fill">
               <div class="top">
                 <div>
-                  <span class="registration">{{ fill.registration_number }}</span>
-                  <span class="muted">{{ fill.driver_name }}</span>
+                  @if (showVehicle()) {
+                    <span class="registration">{{ fill.registration_number }}</span>
+                  }
+                  @if (!personal()) {
+                    <span class="muted">{{ fill.driver_name }}</span>
+                  }
                 </div>
                 <span class="amount">{{ litres(fill.litres_filled) }}</span>
               </div>
@@ -239,18 +307,16 @@
                   </span>
                 </div>
               }
-              @if (!atPump()) {
-                <div class="duty">
-                  <span class="duty-label">Duty particulars</span>
-                  @if (hasDuty(fill)) {
-                    {{ fill.duty_particulars }}
-                  } @else if (fill.duty_overdue) {
-                    <span class="badge badge-danger duty-badge">Overdue</span>
-                  } @else {
-                    <span class="badge badge-warning duty-badge">Due</span>
-                  }
-                </div>
-              }
+              <div class="duty">
+                <span class="duty-label">Duty particulars</span>
+                @if (hasDuty(fill)) {
+                  {{ fill.duty_particulars }}
+                } @else if (fill.duty_overdue) {
+                  <span class="badge badge-danger duty-badge">Overdue</span>
+                } @else {
+                  <span class="badge badge-warning duty-badge">Due</span>
+                }
+              </div>
             </li>
           }
         </ul>

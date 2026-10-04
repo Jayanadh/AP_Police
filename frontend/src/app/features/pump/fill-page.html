@@ -184,11 +184,6 @@
                 <span class="amount">{{ litres(fill.litres_filled) }}</span>
               </div>
               <p class="meta muted">{{ fill.driver_name }} · {{ formatTime(fill.filled_at) }}</p>
-              @if (isEmergency(fill)) {
-                <span class="badge emergency-badge"
-                  >Emergency {{ litres(fill.emergency_litres) }}</span
-                >
-              }
             </li>
           }
         </ul>

@@ -1,14 +1,16 @@
 """GET /api/fuel/statement/: what was filled in a period, as each role sees it."""
 from datetime import date, datetime
 from decimal import Decimal
+from io import BytesIO
 from types import SimpleNamespace
 from unittest import mock
 
 import pytest
+from openpyxl import load_workbook
 
 from common.months import IST
 from fleet import services
-from fleet.models import FuelType
+from fleet.models import FuelType, VehicleAssignment
 from fuel.models import RequestStatus
 from pumps.models import StockEntry, StockEntryKind
 from testing.factories import (
@@ -104,8 +106,14 @@ def test_the_mto_sees_their_vehicles_fills_with_totals_by_vehicle_and_by_pump(ap
         },
     ]
     assert body["by_pump"] == [
-        {"pump": world.bunk.pk, "pump_name": "Trunk Road Bunk", "pump_kind": "TIE_UP", "fills": 2, "litres": "40.00"},
-        {"pump": world.pump.pk, "pump_name": "Nellore Police Pump", "pump_kind": "POLICE", "fills": 1, "litres": "20.00"},
+        {
+            "pump": world.bunk.pk, "pump_name": "Trunk Road Bunk", "pump_kind": "TIE_UP", "fills": 2,
+            "litres": "40.00",
+        },
+        {
+            "pump": world.pump.pk, "pump_name": "Nellore Police Pump", "pump_kind": "POLICE", "fills": 1,
+            "litres": "20.00",
+        },
     ]
     assert body["by_unit"] is None
     assert body["stock"] is None
@@ -155,12 +163,14 @@ def test_the_pto_office_filter_must_be_an_id(api, world):
     assert response.json() == {"detail": "Use the office's id."}
 
 
-def test_an_officer_sees_the_vehicles_linked_to_them(api, world):
+def test_an_officer_sees_the_vehicles_linked_to_them_with_no_table_per_vehicle(api, world):
     body = get(api, world.officer)
 
     assert body["litres"] == "30.00"
-    assert [row["registration_number"] for row in body["by_vehicle"]] == ["AP39PA0001"]
-    assert body["by_unit"] is None
+    assert (body["by_vehicle"], body["by_unit"]) == (None, None)
+    assert [(row["pump_name"], row["litres"]) for row in body["by_pump"]] == [
+        ("Nellore Police Pump", "20.00"), ("Trunk Road Bunk", "10.00"),
+    ]
 
 
 def test_a_driver_sees_their_own_fills(api, world):
@@ -171,6 +181,7 @@ def test_a_driver_sees_their_own_fills(api, world):
 
     assert body["litres"] == "30.00"
     assert body["fills"] == 2
+    assert body["by_vehicle"] is None  # a driver's fills are of their own vehicle
     assert get(api, other_driver)["litres"] == "5.00"
 
 
@@ -180,8 +191,7 @@ def test_police_pump_staff_see_every_fill_at_their_pump_and_the_stock(api, world
     body = get(api, staff)
 
     assert body["litres"] == "35.00"  # Nellore's car and Guntur's jeep
-    assert [row["registration_number"] for row in body["by_vehicle"]] == ["AP39PA0001", "AP07PB0001"]
-    assert body["by_pump"] is None
+    assert (body["by_vehicle"], body["by_pump"]) == (None, None)  # one table of fills instead
     assert [row["fuel_type"] for row in body["stock"]] == ["PETROL", "DIESEL"]
 
 
@@ -204,30 +214,41 @@ def entry(tank, kind, litres, before, after, when):
 def test_the_stock_of_each_tank_over_the_period(api, world):
     petrol = world.pump.tanks.get(fuel_type=FuelType.PETROL)
     diesel = world.pump.tanks.get(fuel_type=FuelType.DIESEL)
-    entry(petrol, StockEntryKind.MEASUREMENT, "500", "0", "500", datetime(2026, 9, 30, 7, tzinfo=IST))
+    entry(petrol, StockEntryKind.OPENING, "500", "0", "500", datetime(2026, 9, 30, 7, tzinfo=IST))
     entry(petrol, StockEntryKind.TANKER_RECEIPT, "300", "500", "800", on(2, 9))
     entry(petrol, StockEntryKind.DISPENSE, "20", "800", "780", on(2, 12))
-    entry(petrol, StockEntryKind.MEASUREMENT, "770", "780", "770", on(4, 7))
-    entry(petrol, StockEntryKind.DISPENSE, "70", "770", "700", on(8, 9))  # after the week
-    entry(diesel, StockEntryKind.MEASUREMENT, "400", "0", "400", datetime(2026, 9, 30, 7, tzinfo=IST))
+    entry(petrol, StockEntryKind.DISPENSE, "70", "780", "710", on(8, 9))  # after the week
+    entry(diesel, StockEntryKind.OPENING, "400", "0", "400", datetime(2026, 9, 30, 7, tzinfo=IST))
 
     stock = get(api, PumpStaffFactory(pump=world.pump, unit=world.nellore))["stock"]
 
     assert stock == [
         {
             "fuel_type": "PETROL", "opening_litres": "500.00", "received_litres": "300.00",
-            "dispensed_litres": "20.00", "measured_change_litres": "-10.00", "closing_litres": "770.00",
+            "dispensed_litres": "20.00", "closing_litres": "780.00",
         },
         {
             "fuel_type": "DIESEL", "opening_litres": "400.00", "received_litres": "0.00",
-            "dispensed_litres": "0.00", "measured_change_litres": "0.00", "closing_litres": "400.00",
+            "dispensed_litres": "0.00", "closing_litres": "400.00",
         },
     ]
 
 
+def test_an_opening_stock_set_in_the_period_counts_with_what_was_received(api, world):
+    """A pump that joined in the middle of the period: its first stock arrived then, like a delivery."""
+    petrol = world.pump.tanks.get(fuel_type=FuelType.PETROL)
+    entry(petrol, StockEntryKind.OPENING, "250", "0", "250", on(3, 7))
+    entry(petrol, StockEntryKind.DISPENSE, "10", "250", "240", on(4, 9))
+
+    stock = get(api, PumpStaffFactory(pump=world.pump, unit=world.nellore))["stock"]
+
+    assert (stock[0]["opening_litres"], stock[0]["received_litres"]) == ("0.00", "250.00")
+    assert (stock[0]["dispensed_litres"], stock[0]["closing_litres"]) == ("10.00", "240.00")
+
+
 def test_a_tank_whose_first_entry_comes_after_the_period_opened_with_that_entrys_stock_before(api, world):
     petrol = world.pump.tanks.get(fuel_type=FuelType.PETROL)
-    entry(petrol, StockEntryKind.MEASUREMENT, "250", "0", "250", on(20, 7))
+    entry(petrol, StockEntryKind.OPENING, "250", "0", "250", on(20, 7))
 
     stock = get(api, PumpStaffFactory(pump=world.pump, unit=world.nellore))["stock"]
 
@@ -261,3 +282,58 @@ def test_an_empty_period_is_all_zero(api, world):
 
 def test_signing_in_is_required(api):
     assert api.get(URL, WEEK).status_code == 403
+
+
+# --- downloads -----------------------------------------------------------------------------------------------------
+
+EXPORT = "/api/fuel/statement/export/"
+
+
+def sheets(api, user, **params):
+    api.force_login(user)
+    response = api.get(EXPORT, {**WEEK, **params})
+    assert response.status_code == 200, response.content
+    book = load_workbook(BytesIO(response.content))
+    return {name: [[cell.value for cell in row] for row in book[name].iter_rows()] for name in book.sheetnames}
+
+
+def test_a_drivers_download_has_their_fills_without_the_vehicle(api, world):
+    world.driver.full_name = "Ravi Kumar"
+    world.driver.save()
+
+    book = sheets(api, world.driver)
+
+    assert list(book) == ["Fills", "Totals", "By pump"]
+    assert book["Fills"] == [
+        ["Date", "Litres", "Emergency (L)", "Pump", "Duty particulars"],
+        [datetime(2026, 10, 2, 12, 0), 20, 0, "Nellore Police Pump", None],
+        [datetime(2026, 10, 5, 12, 0), 10, 4, "Trunk Road Bunk", None],
+    ]
+    assert book["Totals"] == [["Period", "Fills", "Total (L)", "Emergency (L)"], ["01 Oct – 07 Oct 2026", 2, 30, 4]]
+
+
+def test_pump_staffs_download_has_one_table_of_fills_with_the_officer_and_no_emergency(api, world):
+    world.officer.full_name = "S. Venkata Rao"
+    world.officer.save()
+    VehicleAssignment.objects.filter(person=world.officer).update(started_at=on(1))  # linked before the fills
+
+    book = sheets(api, PumpStaffFactory(pump=world.pump, unit=world.nellore))
+
+    assert list(book) == ["Fills", "Totals", "Stock"]
+    assert book["Fills"] == [
+        ["Date", "Vehicle", "Fuel", "Litres", "Officer"],
+        [datetime(2026, 10, 2, 12, 0), "AP39PA0001", "Petrol", 20, "S. Venkata Rao"],
+        [datetime(2026, 10, 3, 12, 0), "AP07PB0001", "Diesel", 15, None],  # Guntur's jeep has no officer
+    ]
+    assert book["Totals"] == [
+        ["Period", "Fills", "Petrol (L)", "Diesel (L)", "Total (L)"], ["01 Oct – 07 Oct 2026", 2, 20, 15, 35],
+    ]
+
+
+def test_the_mtos_download_keeps_every_column_and_table(api, world):
+    book = sheets(api, world.mto)
+
+    assert list(book) == ["Fills", "Totals", "By vehicle", "By pump"]
+    assert book["Fills"][0] == [
+        "Date", "Vehicle", "Fuel", "Litres", "Emergency (L)", "Driver", "Pump", "Office", "Duty particulars",
+    ]

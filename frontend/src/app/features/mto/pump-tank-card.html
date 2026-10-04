@@ -34,9 +34,34 @@
     <app-stat-card
       icon="gauge"
       label="Capacity"
+      tone="info"
       [value]="tank().capacity_litres === null ? 'Not set' : litres(tank().capacity_litres)"
     />
   </div>
+
+  @if (!tank().opening_set) {
+    <form class="opening" [formGroup]="openingForm" (ngSubmit)="setOpening()">
+      <p class="hint muted">
+        Enter what the tank holds now. It is set only once: after that the stock goes up with tanker
+        receipts and down with fills.
+      </p>
+      <div class="field">
+        <label [for]="'tank-' + tankId() + '-opening'">Opening stock (L)</label>
+        <input
+          [id]="'tank-' + tankId() + '-opening'"
+          type="text"
+          appNumber="2"
+          formControlName="litres"
+        />
+      </div>
+      @if (openingError()) {
+        <p class="error" role="alert">{{ openingError() }}</p>
+      }
+      <button type="submit" class="btn btn-primary btn-sm" [disabled]="settingOpening()">
+        Set opening stock
+      </button>
+    </form>
+  }
 
   <form class="levels" [formGroup]="levels" (ngSubmit)="save()">
     <div class="form-grid">
@@ -44,9 +69,8 @@
         <label [for]="'tank-' + tankId() + '-threshold'">Alert level (L)</label>
         <input
           [id]="'tank-' + tankId() + '-threshold'"
-          type="number"
-          inputmode="decimal"
-          step="any"
+          type="text"
+          appNumber="2"
           formControlName="threshold"
         />
       </div>
@@ -54,9 +78,8 @@
         <label [for]="'tank-' + tankId() + '-capacity'">Capacity (L)</label>
         <input
           [id]="'tank-' + tankId() + '-capacity'"
-          type="number"
-          inputmode="decimal"
-          step="any"
+          type="text"
+          appNumber="2"
           formControlName="capacity"
         />
       </div>

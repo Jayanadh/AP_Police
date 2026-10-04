@@ -219,8 +219,9 @@ def tank_id(operator, fuel_type):
     return next(tank["id"] for tank in ok(operator.get("/api/tanks/")) if tank["fuel_type"] == fuel_type)
 
 
-def measure(operator, fuel_type, litres):
-    return ok(operator.post(f"/api/tanks/{tank_id(operator, fuel_type)}/measure/", {"litres": litres}))
+def set_opening(mto, fuel_type, litres):
+    """The MTO sets the opening stock of the office's police pump's tank, once."""
+    return ok(mto.post(f"/api/tanks/{tank_id(mto, fuel_type)}/opening/", {"litres": litres}))
 
 
 def stock(client, fuel_type):
@@ -339,9 +340,9 @@ def test_setup_pto_opens_an_office_and_the_mto_builds_its_fleet_and_pumps(pto):
 
 
 # --- 2. daily fuel -------------------------------------------------------------------------------------------------
-def test_daily_fuel_measurement_request_pin_fill_and_duty_particulars(office):
+def test_daily_fuel_opening_stock_request_pin_fill_and_duty_particulars(office):
     registration = office.vehicle["registration_number"]
-    measure(office.police, "DIESEL", "400")
+    set_opening(office.mto, "DIESEL", "400")
     assert stock(office.police, "DIESEL") == "400.00"
 
     raised = raise_request(office.driver, "40", office.police_pump)
@@ -365,7 +366,7 @@ def test_daily_fuel_measurement_request_pin_fill_and_duty_particulars(office):
     assert stock(office.police, "DIESEL") == "360.00"
     assert stock(office.mto, "DIESEL") == "360.00"
     ledger = ok(office.police.get(f"/api/tanks/{tank_id(office.police, 'DIESEL')}/entries/"))
-    assert sorted(entry["kind"] for entry in ledger) == ["DISPENSE", "MEASUREMENT"]
+    assert sorted(entry["kind"] for entry in ledger) == ["DISPENSE", "OPENING"]
 
     # The driver owes the particulars; once entered, the officer sees them with the fill.
     owed = ok(office.driver.get("/api/dashboard/"))["duty_due"]
@@ -384,7 +385,6 @@ def test_daily_fuel_measurement_request_pin_fill_and_duty_particulars(office):
     # The pump's and the MTO's dashboards add the fill up.
     pump = ok(office.police.get("/api/dashboard/"))
     assert pump["today_fills"] == {"count": 1, "litres": "40.00"}
-    assert pump["month_fills"]["diesel_litres"] == "40.00"
     summary = ok(office.mto.get("/api/dashboard/"))
     assert summary["fuel"] == {"used_litres": "40.00", "limit_litres": "150.00"}
     assert [(row["registration_number"], row["used_litres"]) for row in summary["top_vehicles"]] == [
@@ -396,7 +396,7 @@ def test_daily_fuel_measurement_request_pin_fill_and_duty_particulars(office):
 def test_emergency_fill_at_a_tie_up_bunk_is_allowed_and_extra_quota_restores_the_balance(office):
     mto, registration = office.mto, office.vehicle["registration_number"]
     set_limit(mto, office.vehicle, "60")
-    measure(office.police, "DIESEL", "400")
+    set_opening(mto, "DIESEL", "400")
 
     fill(office, office.police_pump, office.police, "60")  # the whole month's limit
     assert quota(mto, office.vehicle)["remaining_litres"] == "0.00"
@@ -459,8 +459,8 @@ def test_emergency_fill_at_a_tie_up_bunk_is_allowed_and_extra_quota_restores_the
 def test_dropping_below_100_litres_alerts_the_mto_and_the_pump_staff_exactly_once(office):
     pump_name = office.police_pump["name"]
     low = f"Low diesel stock at {pump_name}"
-    measure(office.police, "PETROL", "500")
-    measure(office.police, "DIESEL", "150")
+    set_opening(office.mto, "PETROL", "500")
+    set_opening(office.mto, "DIESEL", "150")
     assert low not in alert_titles(office.mto)
 
     fill(office, office.police_pump, office.police, "30")  # 120 L left
@@ -475,12 +475,12 @@ def test_dropping_below_100_litres_alerts_the_mto_and_the_pump_staff_exactly_onc
     tanks = {tank["fuel_type"]: tank["is_low"] for tank in ok(office.mto.get("/api/dashboard/"))["tanks"]}
     assert tanks == {"DIESEL": True, "PETROL": False}
 
-    # A fill larger than the stock is refused (and a lower measurement, still below 100 L, is not a new drop).
-    measure(office.police, "DIESEL", "20")
-    request = raise_request(office.driver, "30", office.police_pump)
-    pin = {"pin": request["pin"]}
-    refused(office.police.post(f"/api/fuel/incoming/{request['id']}/check-pin/", pin), "Only 20.00 L of diesel")
-    refused(office.police.post(f"/api/fuel/incoming/{request['id']}/fill/", pin), "Only 20.00 L of diesel in stock")
+    # More fills while low are no new drop; asking for more than the pump holds is refused at once.
+    fill(office, office.police_pump, office.police, "50")  # 20 L left
+    refused(
+        office.driver.post("/api/fuel/requests/", {"litres": "30", "pump": office.police_pump["id"]}),
+        "Nellore DPO Police Pump has only 20.00 L of diesel",
+    )
     assert stock(office.police, "DIESEL") == "20.00"
     assert alert_titles(office.mto).count(low) == 1
 

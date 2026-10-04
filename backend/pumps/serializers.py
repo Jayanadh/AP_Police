@@ -19,28 +19,34 @@ FORMER_STAFF = (UserStatus.TERMINATED, UserStatus.REJECTED)
 
 class TankSerializer(serializers.ModelSerializer):
     is_low = serializers.BooleanField(read_only=True)
+    # Anything recorded for the tank yet. Until then the MTO may set its opening stock.
+    opening_set = serializers.SerializerMethodField()
 
     class Meta:
         model = PumpTank
         fields = [
             "id", "fuel_type", "current_stock_litres", "low_stock_threshold_litres", "capacity_litres", "is_low",
+            "opening_set",
         ]
         read_only_fields = fields
+
+    def get_opening_set(self, tank) -> bool:
+        found = getattr(tank, "opening_set", None)  # annotated by the views that list many tanks
+        return tank.entries.exists() if found is None else found
 
 
 class TankDetailSerializer(TankSerializer):
     """A tank on its own: the MTO may change its alert level and capacity, nothing else is writable."""
 
     pump_name = serializers.CharField(source="pump.name", read_only=True)
-    last_measured_at = serializers.DateTimeField(read_only=True, allow_null=True)  # annotated by the viewset
 
     class Meta(TankSerializer.Meta):
         fields = [
             "id", "pump", "pump_name", "fuel_type", "current_stock_litres", "low_stock_threshold_litres",
-            "capacity_litres", "is_low", "last_measured_at",
+            "capacity_litres", "is_low", "opening_set",
         ]
         read_only_fields = [
-            "id", "pump", "pump_name", "fuel_type", "current_stock_litres", "is_low", "last_measured_at",
+            "id", "pump", "pump_name", "fuel_type", "current_stock_litres", "is_low", "opening_set",
         ]
         extra_kwargs = {
             "low_stock_threshold_litres": {"min_value": Decimal("0")},
@@ -69,7 +75,8 @@ class StockEntrySerializer(serializers.ModelSerializer):
 
 
 class PumpSerializer(serializers.ModelSerializer):
-    """A pump of the MTO's own unit. The viewset decides the unit and the active flag."""
+    """A pump of the MTO's own unit. The viewset decides the unit, its district and the active flag: an MTO office
+    works in one district, so its pumps are in that district."""
 
     kind_label = serializers.CharField(source="get_kind_display", read_only=True)
     district_name = serializers.CharField(source="district.name", read_only=True)
@@ -82,7 +89,7 @@ class PumpSerializer(serializers.ModelSerializer):
             "id", "name", "kind", "kind_label", "address", "district", "district_name", "latitude", "longitude",
             "opening_hours", "sells_petrol", "sells_diesel", "is_active", "tanks", "staff_count",
         ]
-        read_only_fields = ["is_active"]
+        read_only_fields = ["district", "is_active"]
 
     def validate_name(self, value):
         # The unit is set by the viewset, not sent by the client, so the (unit, name) rule is checked here.

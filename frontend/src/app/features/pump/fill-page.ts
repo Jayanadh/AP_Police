@@ -13,6 +13,7 @@ import {
   FuelRequest,
   FuelRequestsApi,
   IncomingRequest,
+  PumpFill,
 } from '../../core/api/fuel-requests-api';
 import { fuelLabel } from '../../core/api/vehicles-api';
 import { apiErrorMessage } from '../../core/api-error';
@@ -326,7 +327,7 @@ export class FillPage {
   /** The requests drivers raised for this pump, oldest first. */
   protected readonly incoming = new Panel<IncomingRequest[]>(() => this.api.incoming());
   /** Today's fills at this pump: today in India, worked out again on every load. */
-  protected readonly fills = new Panel<FuelRequest[]>(() =>
+  protected readonly fills = new Panel<PumpFill[]>(() =>
     this.api.pumpFills(periodOf('day', todayIso(this.now()))),
   );
 

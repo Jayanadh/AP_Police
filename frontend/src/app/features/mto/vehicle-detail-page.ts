@@ -43,6 +43,7 @@ import { ConfirmButton } from '../../ui/confirm-button';
 import { DownloadButton } from '../../ui/download-button';
 import { Icon } from '../../ui/icon';
 import { LoadError } from '../../ui/load-error';
+import { NumberField } from '../../ui/number-field';
 import { PageHeader } from '../../ui/page-header';
 import { StatusBadge } from '../../ui/status-badge';
 import { ToastService } from '../../ui/toast';
@@ -81,6 +82,7 @@ const NO_SERVICE_DETAILS = 'Enter the service date and the odometer reading.';
     Icon,
     LoadError,
     NgTemplateOutlet,
+    NumberField,
     PageHeader,
     ReactiveFormsModule,
     RouterLink,

@@ -62,4 +62,13 @@ describe('MastersApi', () => {
     expect(result?.is_active).toBe(false);
     http.verify();
   });
+
+  it('deletes an item', () => {
+    let done = false;
+    api.remove('cadres', 9).subscribe(() => (done = true));
+    const req = http.expectOne('/api/masters/cadres/9/');
+    expect(req.request.method).toBe('DELETE');
+    req.flush(null, { status: 204, statusText: 'No Content' });
+    expect(done).toBe(true);
+  });
 });

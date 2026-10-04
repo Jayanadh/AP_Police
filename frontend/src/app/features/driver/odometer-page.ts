@@ -8,6 +8,7 @@ import { Panel } from '../../core/panel';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
 import { LoadError } from '../../ui/load-error';
+import { NumberField } from '../../ui/number-field';
 import { PageHeader } from '../../ui/page-header';
 import { ToastService } from '../../ui/toast';
 
@@ -16,7 +17,7 @@ const NOT_WHOLE_KM = 'Enter the reading in whole kilometres.';
 /** The driver's weekly odometer reading for the most recent Sunday, and the readings before it. */
 @Component({
   selector: 'app-driver-odometer-page',
-  imports: [EmptyState, Icon, LoadError, PageHeader, ReactiveFormsModule],
+  imports: [EmptyState, Icon, LoadError, NumberField, PageHeader, ReactiveFormsModule],
   templateUrl: './odometer-page.html',
   styles: `
     .layout {
@@ -145,6 +146,11 @@ export class OdometerPage {
     const value = this.form.controls.reading_km.value;
     if (value === null || !Number.isInteger(value) || value < 0) {
       this.fieldError.set(NOT_WHOLE_KM);
+      return;
+    }
+    const lowest = this.vehicle()?.latest_odometer_km ?? 0;
+    if (value < lowest) {
+      this.fieldError.set(`The reading can't be lower than the last reading (${km(lowest)}).`);
       return;
     }
     this.fieldError.set('');

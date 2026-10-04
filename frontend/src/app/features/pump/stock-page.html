@@ -1,7 +1,7 @@
 <div class="page">
   <app-page-header
     title="Stock"
-    subtitle="Record the morning measurement and each tanker delivery for your pump's tanks."
+    subtitle="Record each tanker delivery. Every fill takes its litres off the stock by itself."
   />
 
   @if (tanks.loading()) {
@@ -28,47 +28,6 @@
     </div>
 
     <div class="forms">
-      <section class="card" aria-labelledby="measure-title">
-        <h2 id="measure-title">Morning measurement</h2>
-        <form id="measure-form" novalidate [formGroup]="measureForm" (ngSubmit)="measure()">
-          <p class="hint muted">Sets the stock to what the tank holds now.</p>
-          <div>
-            <div class="group-label" id="measure-fuel-label">Fuel</div>
-            <div class="chips" role="group" aria-labelledby="measure-fuel-label">
-              @for (tank of tanks.data(); track tank.id) {
-                <button
-                  type="button"
-                  class="chip"
-                  [class.active]="measureId() === tank.id"
-                  [attr.aria-pressed]="measureId() === tank.id"
-                  (click)="chooseForMeasurement(tank.id)"
-                >
-                  {{ fuelLabel(tank.fuel_type) }}
-                </button>
-              }
-            </div>
-          </div>
-          <div class="field litres-box">
-            <label for="measure-litres">Litres in the tank</label>
-            <input
-              id="measure-litres"
-              type="number"
-              inputmode="decimal"
-              min="0"
-              step="0.01"
-              formControlName="litres"
-            />
-            <span aria-hidden="true">L</span>
-          </div>
-          @if (measureError()) {
-            <p class="error form-error" role="alert">{{ measureError() }}</p>
-          }
-          <button type="submit" class="btn btn-primary" [disabled]="measuring()">
-            Record measurement
-          </button>
-        </form>
-      </section>
-
       <section class="card" aria-labelledby="receipt-title">
         <h2 id="receipt-title">Tanker receipt</h2>
         <form id="receipt-form" novalidate [formGroup]="receiptForm" (ngSubmit)="receive()">
@@ -91,14 +50,7 @@
           </div>
           <div class="field litres-box">
             <label for="receipt-litres">Litres received</label>
-            <input
-              id="receipt-litres"
-              type="number"
-              inputmode="decimal"
-              min="0"
-              step="0.01"
-              formControlName="litres"
-            />
+            <input id="receipt-litres" type="text" appNumber="2" formControlName="litres" />
             <span aria-hidden="true">L</span>
           </div>
           <div class="field">
@@ -121,19 +73,22 @@
       </section>
     </div>
 
+    <section class="card entries-controls" aria-label="Period of the stock entries">
+      <app-period-picker [period]="period()" (periodChange)="choosePeriod($event)" />
+      <app-download-button [url]="exportUrl" [params]="downloadParams()" />
+    </section>
+
     <div class="entries-list">
       @for (tank of tanks.data(); track tank.id) {
         @let panel = entriesOf(tank);
         <section class="card entries" [attr.aria-labelledby]="'entries-' + tank.id + '-title'">
-          <h3 [id]="'entries-' + tank.id + '-title'">
-            {{ fuelLabel(tank.fuel_type) }} entries this month
-          </h3>
+          <h3 [id]="'entries-' + tank.id + '-title'">{{ fuelLabel(tank.fuel_type) }} entries</h3>
           @if (panel.error()) {
             <app-load-error [message]="panel.error()" (retry)="panel.load()" small />
           } @else if (panel.loading()) {
             <p class="muted" role="status">Loading entries…</p>
           } @else if (!panel.data()?.length) {
-            <p class="muted">No stock entries this month.</p>
+            <p class="muted">No stock entries in this period.</p>
           } @else {
             <div class="table-wrap">
               <table class="table">

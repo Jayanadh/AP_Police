@@ -17,6 +17,7 @@ from fleet.models import AssignmentKind, Vehicle, VehicleAssignment, VehicleStat
 from fleet.serializers import (
     AssignmentSerializer,
     AssignSerializer,
+    MyVehicleSerializer,
     OdometerReadingSerializer,
     OdometerSubmitSerializer,
     ServiceRecordSerializer,
@@ -225,13 +226,15 @@ class MyVehiclesView(APIView):
 
     def get(self, request):
         user = request.user
-        vehicles = Vehicle.objects.filter(
-            assignments__person=user, assignments__ended_at__isnull=True  # one filter(): the same link row
-        ).prefetch_related(services.current_links_prefetch())
+        vehicles = odometer.with_latest_odometer_km(
+            Vehicle.objects.filter(
+                assignments__person=user, assignments__ended_at__isnull=True  # one filter(): the same link row
+            ).prefetch_related(services.current_links_prefetch())
+        )
         mto = User.objects.filter(unit=user.unit, role=Role.MTO).first()
         return Response(
             {
-                "vehicles": VehicleSerializer(vehicles, many=True).data,
+                "vehicles": MyVehicleSerializer(vehicles, many=True).data,
                 "mto": {
                     "unit_name": user.unit.name,
                     "full_name": mto.full_name if mto else None,

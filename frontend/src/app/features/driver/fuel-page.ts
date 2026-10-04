@@ -22,14 +22,19 @@ import { Panel } from '../../core/panel';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
 import { LoadError } from '../../ui/load-error';
+import { NumberField } from '../../ui/number-field';
 import { PageHeader } from '../../ui/page-header';
 import { StatusBadge } from '../../ui/status-badge';
 import { ToastService } from '../../ui/toast';
 import { FuelLeftCard } from './fuel-left-card';
 import { PinCard } from './pin-card';
 
-/** The quick amounts offered beside the litres field. */
+/** The quick amounts offered beside the litres field, after the latest amounts filled. */
 const QUICK_LITRES = [10, 20];
+/** How many of the latest amounts filled are offered as chips. */
+const RECENT_AMOUNTS = 3;
+/** How many of the latest requests are listed, besides the fills still owing duty particulars. */
+const LATEST_REQUESTS = 3;
 
 const NO_LITRES = 'Enter the litres you need.';
 const NO_PUMP = 'Pick the pump you will fill at.';
@@ -51,6 +56,7 @@ function idFrom(value: string | undefined): number | null {
     FuelLeftCard,
     Icon,
     LoadError,
+    NumberField,
     PageHeader,
     PinCard,
     ReactiveFormsModule,
@@ -118,6 +124,22 @@ function idFrom(value: string | undefined): number | null {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
+    }
+
+    .chip.recent app-icon {
+      color: var(--muted);
+    }
+
+    .chip.recent.active app-icon {
+      color: inherit;
+    }
+
+    .statement-link {
+      display: inline-block;
+      margin-top: 14px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--primary-strong);
     }
 
     .emergency {
@@ -232,7 +254,7 @@ export class FuelPage {
   protected readonly vehicles = new Panel<MyVehicles>(() => this.vehiclesApi.myVehicles());
   protected readonly quota = new Panel<Quota>(() => this.quotaApi.forVehicle(this.vehicle()!.id));
   protected readonly requests = new Panel<FuelRequest[]>(() => this.requestsApi.list());
-  /** The pumps that sell the vehicle's fuel, to pick where the request will be filled. */
+  /** The pumps that can fill the vehicle's fuel now (the server leaves out the rest), to pick where to fill. */
   protected readonly directory = new Panel<DirectoryPump[]>(() =>
     this.pumpsApi.directory({ fuel: this.vehicle()!.fuel_type }),
   );
@@ -273,9 +295,29 @@ export class FuelPage {
     const value = this.litresValue();
     return value !== null && value > this.normalLeft();
   });
-  /** A full tank: what the tank holds, but no more than is left this month. */
-  protected readonly fullTank = computed(() =>
-    Math.min(Number(this.vehicle()?.tank_capacity_litres ?? 0), this.normalLeft()),
+  /** A full tank: what the tank holds, as set when the vehicle was added. */
+  protected readonly fullTank = computed(() => Number(this.vehicle()?.tank_capacity_litres ?? 0));
+  /** The latest amounts filled, newest first, leaving out any that has a chip of its own. */
+  protected readonly recentLitres = computed(() => {
+    const offered = new Set([...QUICK_LITRES, this.fullTank()]);
+    const amounts: number[] = [];
+    for (const request of this.requests.data() ?? []) {
+      const amount = Number(request.litres_filled);
+      if (request.status === 'FILLED' && amount > 0 && !offered.has(amount)) {
+        offered.add(amount);
+        amounts.push(amount);
+      }
+      if (amounts.length === RECENT_AMOUNTS) {
+        break;
+      }
+    }
+    return amounts;
+  });
+  /** Beside the form: the latest requests and every fill still owing duty particulars. */
+  protected readonly listed = computed(() =>
+    (this.requests.data() ?? []).filter(
+      (request, index) => index < LATEST_REQUESTS || this.owesDuty(request),
+    ),
   );
   protected readonly formError = signal('');
   protected readonly saving = signal(false);
@@ -304,7 +346,7 @@ export class FuelPage {
     // Coming from a pump in the finder: start on that pump, if it is offered.
     effect(() => {
       const id = this.pumpId();
-      const offered = this.directory.data()?.find((pump) => pump.id === id && this.available(pump));
+      const offered = this.directory.data()?.find((pump) => pump.id === id);
       untracked(() => {
         if (offered && !this.form.controls.pump.value) {
           this.form.controls.pump.setValue(String(offered.id));
@@ -323,14 +365,8 @@ export class FuelPage {
     });
   }
 
-  /** Sold here and, at a police pump, in stock: a pump the driver can pick. */
-  protected available(pump: DirectoryPump): boolean {
-    return this.vehicle()?.fuel_type === 'PETROL' ? pump.petrol_available : pump.diesel_available;
-  }
-
   protected pumpOption(pump: DirectoryPump): string {
-    const place = pump.district_name ? `${pump.name}, ${pump.district_name}` : pump.name;
-    return this.available(pump) ? place : `${place} (out of stock)`;
+    return pump.district_name ? `${pump.name}, ${pump.district_name}` : pump.name;
   }
 
   protected setLitres(value: number): void {

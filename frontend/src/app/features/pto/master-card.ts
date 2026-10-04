@@ -2,11 +2,15 @@ import { afterNextRender, Component, inject, Injector, input, OnInit, signal } f
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MasterItem, MastersApi, MasterKind } from '../../core/api/masters-api';
 import { apiErrorMessage } from '../../core/api-error';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Icon } from '../../ui/icon';
 import { LoadError } from '../../ui/load-error';
 import { ToastService } from '../../ui/toast';
 
-/** One master list (districts, designations or cadres): add a value, rename one, switch values on and off. */
+/**
+ * One master list (districts, designations or cadres): add a value, rename one, switch values on and off, and delete
+ * one nobody uses.
+ */
 @Component({
   selector: 'app-master-card',
   imports: [Icon, LoadError, ReactiveFormsModule],
@@ -76,6 +80,10 @@ import { ToastService } from '../../ui/toast';
       }
     }
 
+    .delete {
+      color: color-mix(in srgb, var(--danger) 80%, black);
+    }
+
     .toggle {
       flex: none;
       min-width: 88px;
@@ -85,6 +93,7 @@ import { ToastService } from '../../ui/toast';
 })
 export class MasterCard implements OnInit {
   private readonly api = inject(MastersApi);
+  private readonly confirm = inject(ConfirmDialog);
   private readonly toasts = inject(ToastService);
   private readonly injector = inject(Injector);
 
@@ -220,6 +229,35 @@ export class MasterCard implements OnInit {
         this.items.update((all) => all.map((one) => (one.id === updated.id ? updated : one)));
         this.busyId.set(null);
         this.toasts.show(`${updated.name} is now ${updated.is_active ? 'active' : 'inactive'}.`);
+      },
+      error: (err) => {
+        this.error.set(apiErrorMessage(err));
+        this.busyId.set(null);
+      },
+    });
+  }
+
+  /** Asks first; the server refuses an item that people, offices or pumps use, and says so. */
+  protected async remove(item: MasterItem): Promise<void> {
+    if (this.busyId() !== null) {
+      return;
+    }
+    const yes = await this.confirm.ask({
+      title: `Delete ${item.name}?`,
+      message: `It comes off the list for good. A ${this.noun()} in use can't be deleted: switch it off instead.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!yes) {
+      return;
+    }
+    this.error.set('');
+    this.busyId.set(item.id);
+    this.api.remove(this.kind(), item.id).subscribe({
+      next: () => {
+        this.items.update((all) => all.filter((one) => one.id !== item.id));
+        this.busyId.set(null);
+        this.toasts.show(`${item.name} deleted.`);
       },
       error: (err) => {
         this.error.set(apiErrorMessage(err));

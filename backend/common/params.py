@@ -27,3 +27,8 @@ def vehicle_id(params: Mapping[str, str]) -> int | None:
 def pump_id(params: Mapping[str, str]) -> int | None:
     """`?pump=<id>`: one police pump or tie-up bunk."""
     return _id(params, "pump", "Use the pump's id.")
+
+
+def after_id(params: Mapping[str, str]) -> int:
+    """`?after=<cursor>`: only what was kept after the last answer; 0 (the default) for everything."""
+    return _id(params, "after", "Use the cursor from the last answer.") or 0

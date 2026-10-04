@@ -54,7 +54,7 @@
                     @if (policePumps().length) {
                       <optgroup label="Police pumps">
                         @for (pump of policePumps(); track pump.id) {
-                          <option [value]="pump.id" [disabled]="!available(pump)">
+                          <option [value]="pump.id">
                             {{ pumpOption(pump) }}
                           </option>
                         }
@@ -63,7 +63,7 @@
                     @if (tieUps().length) {
                       <optgroup label="Tie-up bunks">
                         @for (pump of tieUps(); track pump.id) {
-                          <option [value]="pump.id" [disabled]="!available(pump)">
+                          <option [value]="pump.id">
                             {{ pumpOption(pump) }}
                           </option>
                         }
@@ -78,18 +78,25 @@
 
                 <div class="field litres-box">
                   <label for="fuel-litres">Litres</label>
-                  <input
-                    id="fuel-litres"
-                    type="number"
-                    inputmode="decimal"
-                    min="0"
-                    step="0.01"
-                    formControlName="litres"
-                  />
+                  <input id="fuel-litres" type="text" appNumber="2" formControlName="litres" />
                   <span aria-hidden="true">L</span>
                 </div>
 
                 <div class="litre-chips" role="group" aria-label="Quick amounts">
+                  @for (amount of recentLitres(); track amount) {
+                    <button
+                      type="button"
+                      class="chip recent"
+                      [class.active]="litresValue() === amount"
+                      [attr.aria-pressed]="litresValue() === amount"
+                      [attr.aria-label]="litres(amount) + ', filled recently'"
+                      title="Filled recently"
+                      (click)="setLitres(amount)"
+                    >
+                      <app-icon name="clock" [size]="15" />
+                      {{ litres(amount) }}
+                    </button>
+                  }
                   @for (amount of quickLitres; track amount) {
                     <button
                       type="button"
@@ -180,7 +187,7 @@
         <app-empty-state icon="fuel" title="No requests yet." text="Your PIN requests show here." />
       } @else {
         <ul class="list">
-          @for (request of requests.data(); track request.id) {
+          @for (request of listed(); track request.id) {
             <li
               class="request"
               [id]="'request-' + request.id"
@@ -244,6 +251,9 @@
             </li>
           }
         </ul>
+        <a class="statement-link" routerLink="/driver/statement"
+          >All your fills are in the fuel statement</a
+        >
       }
     </section>
   </div>

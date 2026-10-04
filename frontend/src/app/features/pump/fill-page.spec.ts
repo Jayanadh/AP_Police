@@ -277,7 +277,7 @@ describe('FillPage', () => {
       expect(text(rows[0])).toContain('Gopal Rao');
       expect(text(rows[0])).toContain('25.5 L');
       expect(text(rows[1])).toContain('34 L');
-      expect(text(rows[1].querySelector('.emergency-badge'))).toBe('Emergency 4 L');
+      expect(rows[1].querySelector('.emergency-badge')).toBeNull(); // an emergency is the MTO's matter
     });
 
     it('asks for the date in India just after midnight, when the date in UTC is still yesterday', async () => {

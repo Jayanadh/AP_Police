@@ -134,8 +134,18 @@ describe('MtoDashboard', () => {
         transfers_to_decide: 0,
       }),
     );
-    expect(el.querySelectorAll('a.stat-link .stat-default').length).toBe(5);
     expect(el.querySelector('a.stat-link .stat-warning, a.stat-link .stat-danger')).toBeNull();
+    // Calm, each tile still has a colour of its own, so the five are told apart at a glance.
+    const tones = Array.from(el.querySelectorAll('a.stat-link .stat')).map((tile) =>
+      Array.from(tile.classList).find((name) => name !== 'stat'),
+    );
+    expect(tones).toEqual([
+      'stat-teal',
+      'stat-violet',
+      'stat-info',
+      'stat-success',
+      'stat-default',
+    ]);
   });
 
   it('shows this month’s fuel against the limit with a bar', async () => {

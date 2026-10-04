@@ -35,12 +35,7 @@
     </div>
     <div class="field">
       <label for="vehicle-year">Year</label>
-      <input
-        id="vehicle-year"
-        type="number"
-        inputmode="numeric"
-        formControlName="year_of_manufacture"
-      />
+      <input id="vehicle-year" type="text" appNumber formControlName="year_of_manufacture" />
     </div>
     <div class="field">
       <span class="field-label" id="vehicle-fuel-label">Fuel type</span>
@@ -60,21 +55,14 @@
     </div>
     <div class="field">
       <label for="vehicle-tank">Tank capacity (L)</label>
-      <input
-        id="vehicle-tank"
-        type="number"
-        inputmode="decimal"
-        step="any"
-        formControlName="tank_capacity_litres"
-      />
+      <input id="vehicle-tank" type="text" appNumber="2" formControlName="tank_capacity_litres" />
     </div>
     <div class="field">
       <label for="vehicle-limit">Monthly fuel limit (L)</label>
       <input
         id="vehicle-limit"
-        type="number"
-        inputmode="decimal"
-        step="any"
+        type="text"
+        appNumber="2"
         formControlName="monthly_fuel_limit_litres"
       />
     </div>
@@ -102,26 +90,21 @@
       <label for="vehicle-odometer">Odometer at onboarding (km)</label>
       <input
         id="vehicle-odometer"
-        type="number"
-        inputmode="numeric"
+        type="text"
+        appNumber
         formControlName="odometer_at_onboarding_km"
       />
     </div>
     <div class="field">
       <label for="vehicle-service-km">Service every (km)</label>
-      <input
-        id="vehicle-service-km"
-        type="number"
-        inputmode="numeric"
-        formControlName="service_interval_km"
-      />
+      <input id="vehicle-service-km" type="text" appNumber formControlName="service_interval_km" />
     </div>
     <div class="field">
       <label for="vehicle-service-days">Service every (days)</label>
       <input
         id="vehicle-service-days"
-        type="number"
-        inputmode="numeric"
+        type="text"
+        appNumber
         formControlName="service_interval_days"
       />
     </div>

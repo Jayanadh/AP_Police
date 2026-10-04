@@ -53,19 +53,7 @@
     } @else {
       <h1 id="finder-title" class="title">{{ title() }}</h1>
 
-      <div class="fuel-chips" role="group" aria-label="Filter by fuel">
-        @for (chip of fuelChips; track chip.value) {
-          <button
-            type="button"
-            class="chip"
-            [class.active]="fuel() === chip.value"
-            [attr.aria-pressed]="fuel() === chip.value"
-            (click)="fuel.set(chip.value)"
-          >
-            {{ chip.label }}
-          </button>
-        }
-      </div>
+      <p class="for-vehicle muted">{{ forVehicle() }}</p>
 
       @if (locating()) {
         <p class="location-note" role="status">Finding your location…</p>
@@ -82,10 +70,10 @@
         <app-empty-state
           icon="fuel"
           title="No pumps match your search."
-          text="Try another name or district, or another fuel."
+          text="Try another name or district."
         >
-          <button type="button" class="btn btn-secondary" (click)="clearFilters()">
-            Clear filters
+          <button type="button" class="btn btn-secondary" (click)="clearSearch()">
+            Clear search
           </button>
         </app-empty-state>
       } @else {

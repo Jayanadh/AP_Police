@@ -102,7 +102,9 @@ def test_the_client_address_is_the_connections_own_unless_proxies_are_declared()
     """A client could otherwise send a made-up X-Forwarded-For with every login attempt to dodge the throttle."""
     assert settings_values("REST_FRAMEWORK", **PRODUCTION)[0].count("'NUM_PROXIES': 0") == 1
 
-    rest, proxy_header = settings_values("REST_FRAMEWORK", "SECURE_PROXY_SSL_HEADER", DJANGO_PROXY_COUNT="1", **PRODUCTION)
+    rest, proxy_header = settings_values(
+        "REST_FRAMEWORK", "SECURE_PROXY_SSL_HEADER", DJANGO_PROXY_COUNT="1", **PRODUCTION
+    )
     assert "'NUM_PROXIES': 1" in rest
     assert proxy_header == "('HTTP_X_FORWARDED_PROTO', 'https')"
 
@@ -123,3 +125,11 @@ def test_production_passes_djangos_deployment_checklist():
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_throttling_counts_live_in_the_database_so_every_worker_shares_them():
+    """Login and location throttling count in the cache; a cache in each gunicorn worker would let every worker
+    allow the full number of attempts."""
+    [caches] = settings_values("CACHES", **PRODUCTION)
+
+    assert "'BACKEND': 'django.core.cache.backends.db.DatabaseCache'" in caches

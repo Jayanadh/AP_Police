@@ -5,8 +5,8 @@ import { provideRouter } from '@angular/router';
 import { FuelRequest } from '../../core/api/fuel-requests-api';
 import { DirectoryPump } from '../../core/api/pumps-api';
 import { Quota } from '../../core/api/quota-api';
-import { MyVehicles, Vehicle } from '../../core/api/vehicles-api';
-import { makeFuelRequest, makeVehicle } from '../../core/test-data';
+import { MyVehicle, MyVehicles } from '../../core/api/vehicles-api';
+import { makeFuelRequest, makeMyVehicle } from '../../core/test-data';
 import { CONFIRM_GUARD_MS } from '../../ui/confirm-button';
 import { ToastService } from '../../ui/toast';
 import { FuelPage } from './fuel-page';
@@ -28,7 +28,7 @@ const quota = (overrides: Partial<Quota> = {}): Quota => ({
   ...overrides,
 });
 
-const mine = (vehicles: Vehicle[] = [makeVehicle()]): MyVehicles => ({
+const mine = (vehicles: MyVehicle[] = [makeMyVehicle()]): MyVehicles => ({
   vehicles,
   mto: { unit_name: 'MTO Nellore', full_name: 'Ravi Kumar', mobile: '9876543210' },
 });
@@ -117,7 +117,7 @@ const PUMPS = [
     kind_label: 'Tie-up bunk',
     district_name: 'Nellore',
   }),
-  pump({ id: 5, name: 'Guntur Police Pump', district_name: 'Guntur', diesel_available: false }),
+  pump({ id: 5, name: 'Guntur Police Pump', district_name: 'Guntur' }),
 ];
 
 describe('FuelPage', () => {
@@ -221,34 +221,70 @@ describe('FuelPage', () => {
       expect(el.querySelector('app-pin-card')).toBeNull();
     });
 
-    it('fills the litres from the quick chips; a full tank is what fits and is left', async () => {
-      const { el, field, fixture } = await setup({
-        vehicles: mine([makeVehicle({ tank_capacity_litres: '35.00' })]),
+    /** The amount chips, in the order shown. */
+    const chips = (el: HTMLElement) =>
+      Array.from(el.querySelectorAll<HTMLButtonElement>('.litre-chips .chip'));
+    const chip = (el: HTMLElement, label: string) =>
+      chips(el).find((c) => c.textContent?.replace(/\s+/g, ' ').trim() === label)!;
+
+    it('offers the last amounts filled, then 10 L, 20 L and a full tank', async () => {
+      const filled = (id: number, amount: string) =>
+        makeFuelRequest({
+          id,
+          litres_requested: amount,
+          litres_filled: amount,
+          duty_submitted_at: 'x',
+        });
+      const { el, text } = await setup({
+        requests: [
+          filled(1, '15.00'),
+          filled(2, '22.50'),
+          filled(3, '20.00'), // 20 L has its own chip
+          CANCELLED, // not filled
+          filled(4, '18.00'),
+          filled(5, '15.00'), // already offered
+          filled(6, '12.00'), // more than three back
+        ],
       });
-      const chip = (label: string) =>
-        Array.from(el.querySelectorAll<HTMLButtonElement>('.litre-chips .chip')).find((c) =>
-          c.textContent?.includes(label),
-        )!;
-      chip('10 L').click();
-      await fixture.whenStable();
-      expect(field('#fuel-litres')!.value).toBe('10');
-      expect(chip('10 L').classList).toContain('active');
-      chip('20 L').click();
-      await fixture.whenStable();
-      expect(field('#fuel-litres')!.value).toBe('20');
-      // The tank holds 35 L and 42.5 L is left: a full tank is 35 L.
-      chip('Full tank').click();
-      await fixture.whenStable();
-      expect(field('#fuel-litres')!.value).toBe('35');
+
+      expect(chips(el).map((c) => text(c))).toEqual([
+        '15 L',
+        '22.5 L',
+        '18 L',
+        '10 L',
+        '20 L',
+        'Full tank (60 L)',
+      ]);
+      expect(chip(el, '15 L').getAttribute('aria-label')).toBe('15 L, filled recently');
     });
 
-    it('caps a full tank at what is left this month', async () => {
+    it('fills the litres from a chip, and marks the chip', async () => {
       const { el, field, fixture } = await setup();
-      Array.from(el.querySelectorAll<HTMLButtonElement>('.litre-chips .chip'))
-        .find((c) => c.textContent?.includes('Full tank'))!
-        .click();
+      chip(el, '30 L').click(); // DONE: the one recent fill that has no chip of its own
       await fixture.whenStable();
-      expect(field('#fuel-litres')!.value).toBe('42.5');
+      expect(field('#fuel-litres')!.value).toBe('30');
+      expect(chip(el, '30 L').classList).toContain('active');
+      chip(el, '10 L').click();
+      await fixture.whenStable();
+      expect(field('#fuel-litres')!.value).toBe('10');
+      expect(chip(el, '30 L').classList).not.toContain('active');
+    });
+
+    it('takes a full tank as the tank holds it; past what is left it is an emergency', async () => {
+      const { el, field, fixture } = await setup();
+      chip(el, 'Full tank (60 L)').click();
+      await fixture.whenStable();
+      expect(field('#fuel-litres')!.value).toBe('60');
+      expect(el.querySelector('#emergency')).not.toBeNull(); // 42.5 L is left this month
+    });
+
+    it('takes litres typed with up to two decimals, and nothing else', async () => {
+      const { field, fill } = await setup();
+      const box = field('#fuel-litres')!;
+      expect(box.type).toBe('text');
+      expect(box.getAttribute('inputmode')).toBe('decimal');
+      await fill('#fuel-litres', '-12.345');
+      expect(box.value).toBe('12.34');
     });
 
     it('posts the litres as a normal request and shows the PIN card', async () => {
@@ -264,12 +300,8 @@ describe('FuelPage', () => {
       expect(text(el.querySelector('app-pin-card .pin'))).toBe('482917');
       expect(el.querySelector('#request-form')).toBeNull();
       expect(toasts().map((t) => t.text)).toContain('Your PIN is ready. Show it at the pump.');
-      expect(rows().map((row) => row.id)).toEqual([
-        'request-21',
-        'request-14',
-        'request-9',
-        'request-6',
-      ]);
+      // The three latest: the cancelled request is now only in the past.
+      expect(rows().map((row) => row.id)).toEqual(['request-21', 'request-14', 'request-9']);
     });
 
     it('asks for the litres before sending', async () => {
@@ -328,10 +360,6 @@ describe('FuelPage', () => {
       await fill('#fuel-litres', '5');
       expect(text(el.querySelector('#emergency'))).toContain('Up to 8 L extra this month');
       expect(text(el.querySelector('#emergency'))).toContain('Nothing is left this month.');
-      const fullTank = Array.from(
-        el.querySelectorAll<HTMLButtonElement>('.litre-chips .chip'),
-      ).find((c) => c.textContent?.includes('Full tank'))!;
-      expect(fullTank.disabled).toBe(true);
       expect(field('#fuel-litres')!.value).toBe('5');
     });
 
@@ -366,7 +394,7 @@ describe('FuelPage', () => {
       expect(el.querySelector('app-pin-card')).toBeNull();
     });
 
-    it('offers the pumps that sell the vehicle’s fuel, police pumps and tie-up bunks apart', async () => {
+    it('offers the pumps that can fill the vehicle’s fuel now, police pumps and tie-up bunks apart', async () => {
       const { el, text } = await setup({ pick: false });
       const groups = Array.from(el.querySelectorAll('#fuel-pump optgroup'));
       expect(groups.map((group) => group.getAttribute('label'))).toEqual([
@@ -375,9 +403,8 @@ describe('FuelPage', () => {
       ]);
       expect(Array.from(groups[0].querySelectorAll('option')).map(text)).toEqual([
         'Nellore Police Pump, Nellore',
-        'Guntur Police Pump, Guntur (out of stock)',
+        'Guntur Police Pump, Guntur',
       ]);
-      expect(groups[0].querySelectorAll('option')[1].disabled).toBe(true);
       expect(Array.from(groups[1].querySelectorAll('option')).map(text)).toEqual([
         'Kavali Bunk, Nellore',
       ]);
@@ -527,6 +554,30 @@ describe('FuelPage', () => {
       expect(rows()[0].classList).toContain('highlight');
       expect(rows()[1].classList).not.toContain('highlight');
       expect(scrolled).toContain('request-14');
+    });
+
+    it('lists the fills owing duty particulars and the three latest; the rest are in the fuel statement', async () => {
+      const done = (id: number, day: number) =>
+        makeFuelRequest({
+          id,
+          filled_at: `2026-09-${day}T10:00:00+05:30`,
+          duty_particulars: 'Patrol',
+          duty_submitted_at: `2026-09-${day}T18:00:00+05:30`,
+        });
+      const owedLong = makeFuelRequest({ id: 40, filled_at: '2026-09-10T10:00:00+05:30' });
+      const { el, rows } = await setup({
+        requests: [done(50, 25), CANCELLED, done(48, 20), done(46, 18), owedLong, done(42, 5)],
+      });
+
+      expect(rows().map((row) => row.id)).toEqual([
+        'request-50',
+        'request-6',
+        'request-48',
+        'request-40',
+      ]);
+      const more = el.querySelector<HTMLAnchorElement>('#requests-card a.statement-link')!;
+      expect(more.getAttribute('href')).toBe('/driver/statement');
+      expect(more.textContent?.trim()).toBe('All your fills are in the fuel statement');
     });
 
     it('says so when there are no requests yet', async () => {

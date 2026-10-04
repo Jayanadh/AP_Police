@@ -46,10 +46,8 @@
               <label for="odometer-km">Reading (km)</label>
               <input
                 id="odometer-km"
-                type="number"
-                inputmode="numeric"
-                min="0"
-                step="1"
+                type="text"
+                appNumber
                 formControlName="reading_km"
                 [attr.aria-invalid]="fieldError() ? true : null"
                 [attr.aria-describedby]="fieldError() ? 'odometer-km-error' : null"

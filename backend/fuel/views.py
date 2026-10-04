@@ -19,7 +19,7 @@ from common.periods import parse_period
 from fleet import services
 from fleet.models import AssignmentKind
 from fuel import exports, redeem, report, requests
-from fuel.models import EmergencyStatus, FuelGrant, FuelRequest, RequestStatus
+from fuel.models import EmergencyStatus, FuelGrant, FuelRequest
 from fuel.quota import fmt, quota_for
 from fuel.serializers import (
     CheckedRequestSerializer,
@@ -29,6 +29,7 @@ from fuel.serializers import (
     FuelRequestSerializer,
     IncomingRequestSerializer,
     PinSerializer,
+    PumpFillSerializer,
     quota_payload,
 )
 from notifications.service import notify
@@ -221,21 +222,14 @@ class IncomingViewSet(viewsets.GenericViewSet):
 
 class PumpFillsView(generics.ListAPIView):
     """The fills made at the operator's own pump in a period (`?from=&to=`; this month when not given), newest
-    first."""
+    first, each with the officer of the vehicle."""
 
-    serializer_class = FuelRequestSerializer
+    serializer_class = PumpFillSerializer
     permission_classes = [role_required(Role.PUMP_OPERATOR)]
     pagination_class = None
 
     def get_queryset(self):
-        start, end = parse_period(self.request.query_params).bounds()
-        return (
-            FuelRequest.objects.filter(
-                status=RequestStatus.FILLED, pump=self.request.user.pump_id, filled_at__gte=start, filled_at__lt=end
-            )
-            .select_related("vehicle", "driver", "pump")
-            .order_by("-filled_at", "-id")
-        )
+        return report.pump_fills(self.request.user.pump_id, parse_period(self.request.query_params))
 
 
 class FuelStatementView(APIView):

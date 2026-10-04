@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { MasterItem } from '../../core/api/masters-api';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { ToastService } from '../../ui/toast';
 import { MastersPage } from './masters-page';
 
@@ -170,6 +171,59 @@ describe('MastersPage', () => {
     await fixture.whenStable();
     expect(rows('Designations')).toEqual([['Inspector', 'Active']]);
     expect(text(card('Designations').querySelector('.error'))).toBe('Not allowed.');
+  });
+
+  describe('deleting', () => {
+    /** Presses the item's Delete button and answers the question it asks. */
+    async function remove(
+      card: (title: string) => HTMLElement,
+      title: string,
+      name: string,
+      yes = true,
+    ) {
+      (
+        card(title).querySelector(`button[aria-label="Delete ${name}"]`) as HTMLButtonElement
+      ).click();
+      const question = TestBed.inject(ConfirmDialog).open()!;
+      question.answer(yes);
+      await new Promise((resolve) => setTimeout(resolve));
+      return question;
+    }
+
+    it('asks first, then deletes the item and takes it off the list', async () => {
+      const { fixture, http, rows, card } = await setup();
+
+      const question = await remove(card, 'Districts', 'Krishna');
+
+      expect(question.title).toBe('Delete Krishna?');
+      expect(question.tone).toBe('danger');
+      const req = http.expectOne('/api/masters/districts/2/');
+      expect(req.request.method).toBe('DELETE');
+      req.flush(null, { status: 204, statusText: 'No Content' });
+      await fixture.whenStable();
+      expect(rows('Districts')).toEqual([['Guntur', 'Active']]);
+      expect(TestBed.inject(ToastService).messages()[0]?.text).toBe('Krishna deleted.');
+    });
+
+    it('deletes nothing when the question is cancelled', async () => {
+      const { http, rows, card } = await setup();
+      await remove(card, 'Districts', 'Krishna', false);
+      http.expectNone('/api/masters/districts/2/');
+      expect(rows('Districts')).toHaveLength(2);
+    });
+
+    it('says why an item in use is kept', async () => {
+      const { fixture, http, rows, card, text } = await setup();
+      await remove(card, 'Designations', 'Inspector');
+      const reason =
+        "Inspector is used by 12 people, so it can't be deleted. Switch it off instead.";
+      http
+        .expectOne('/api/masters/designations/4/')
+        .flush({ detail: reason }, { status: 400, statusText: 'Bad Request' });
+      await fixture.whenStable();
+      expect(rows('Designations')).toEqual([['Inspector', 'Active']]);
+      expect(text(card('Designations').querySelector('.error'))).toBe(reason);
+    });
   });
 
   describe('renaming', () => {

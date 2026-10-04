@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { DownloadParams } from '../core/downloads';
+import { ConfirmDialog } from './confirm-dialog';
 import { DownloadButton } from './download-button';
 import { ToastService } from './toast';
 
@@ -36,13 +37,22 @@ describe('DownloadButton', () => {
     return { fixture, button };
   }
 
-  it('downloads the Excel file for the filters the page shows now', async () => {
+  /** Presses the button and answers the question it asks. */
+  async function press(button: HTMLButtonElement, yes = true) {
+    button.click();
+    const question = TestBed.inject(ConfirmDialog).open();
+    expect(question?.title).toBe('Download as Excel?');
+    question!.answer(yes);
+    await new Promise((resolve) => setTimeout(resolve));
+  }
+
+  it('asks first, then downloads the Excel file for the filters the page shows now', async () => {
     const { fixture, button } = await setup();
     expect(button.textContent?.trim()).toBe('Download Excel');
     fixture.componentInstance.params.set({ from: '2026-10-01', to: '2026-10-03' });
     await fixture.whenStable();
 
-    button.click();
+    await press(button);
     await fixture.whenStable();
 
     expect(button.disabled).toBe(true);
@@ -62,7 +72,7 @@ describe('DownloadButton', () => {
       shown.push(text);
     });
 
-    button.click();
+    await press(button);
     TestBed.inject(HttpTestingController)
       .expectOne(() => true)
       .flush(new Blob([JSON.stringify({ detail: 'Pick a bunk.' })]), {
@@ -71,6 +81,16 @@ describe('DownloadButton', () => {
       });
     await vi.waitFor(() => expect(shown).toEqual(['Pick a bunk.']));
     await fixture.whenStable();
+    expect(button.disabled).toBe(false);
+  });
+
+  it('downloads nothing when the question is cancelled', async () => {
+    const { fixture, button } = await setup();
+
+    await press(button, false);
+    await fixture.whenStable();
+
+    TestBed.inject(HttpTestingController).expectNone(() => true);
     expect(button.disabled).toBe(false);
   });
 });

@@ -1,9 +1,11 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, UrlTree } from '@angular/router';
 import { ToastService } from '../ui/toast';
-import { AuthStore } from './auth-store';
+import { AuthStore, Me } from './auth-store';
+import { deviceTokenInterceptor, TOKEN_VAULT } from './device-token';
+import { DEVICE_NAME, NATIVE_APP } from './native';
 import { makeMe, signInAs } from './test-data';
 
 describe('AuthStore', () => {
@@ -145,6 +147,56 @@ describe('AuthStore', () => {
       http.verify();
     });
 
+    it('first finishes what was asked to happen before signing out, such as stopping live location', async () => {
+      await signInAs(makeMe());
+      const urls = recordNavigation();
+      let finish = () => {};
+      const steps: string[] = [];
+      store.beforeSignOut(
+        () =>
+          new Promise<void>((resolve) => {
+            steps.push('started');
+            finish = resolve;
+          }),
+      );
+
+      store.signOut();
+      expect(steps).toEqual(['started']);
+      http.expectNone('/api/auth/logout/');
+
+      finish();
+      await new Promise((resolve) => setTimeout(resolve));
+      http.expectOne('/api/auth/logout/').flush(null, { status: 204, statusText: 'No Content' });
+      expect(urls).toEqual(['/login']);
+    });
+
+    it('signs out even when a step before it fails', async () => {
+      await signInAs(makeMe());
+      recordNavigation();
+      store.beforeSignOut(() => Promise.reject(new Error('offline')));
+
+      store.signOut();
+      await new Promise((resolve) => setTimeout(resolve));
+
+      http.expectOne('/api/auth/logout/').flush(null, { status: 204, statusText: 'No Content' });
+      expect(store.user()).toBeNull();
+    });
+
+    it('forgets a step once it is no longer wanted', async () => {
+      await signInAs(makeMe());
+      recordNavigation();
+      let ran = false;
+      const forget = store.beforeSignOut(async () => {
+        ran = true;
+      });
+      forget();
+
+      store.signOut();
+
+      http.expectOne('/api/auth/logout/').flush(null, { status: 204, statusText: 'No Content' });
+      expect(ran).toBe(false);
+    });
+
     it('still reaches /login when the session had already expired (403)', async () => {
       await signInAs(makeMe());
       const urls = recordNavigation();
@@ -217,5 +269,127 @@ describe('AuthStore', () => {
     expect(failure).toBeTruthy();
     expect(store.user()?.must_change_password).toBe(true);
     http.verify();
+  });
+});
+
+describe('AuthStore in the phone apps', () => {
+  let vault: {
+    stored: string | null;
+    read(): Promise<string | null>;
+    write(t: string): Promise<void>;
+    clear(): Promise<void>;
+  };
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    vault = {
+      stored: null,
+      async read() {
+        return this.stored;
+      },
+      async write(token: string) {
+        this.stored = token;
+      },
+      async clear() {
+        this.stored = null;
+      },
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        provideHttpClient(withInterceptors([deviceTokenInterceptor])),
+        provideHttpClientTesting(),
+        { provide: NATIVE_APP, useValue: true },
+        { provide: DEVICE_NAME, useValue: 'Android phone' },
+        { provide: TOKEN_VAULT, useValue: vault },
+      ],
+    });
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve));
+
+  it('signs in for a device token and keeps it on the phone', async () => {
+    const store = TestBed.inject(AuthStore);
+    const driver = makeMe({ role: 'DRIVER' });
+    let signedIn: Me | undefined;
+
+    store.login('ap4001', 'secret').subscribe((user) => (signedIn = user));
+    const req = http.expectOne('/api/auth/token/');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      username: 'ap4001',
+      password: 'secret',
+      device_name: 'Android phone',
+    });
+    req.flush({ token: 'tok-1', expires_at: '2026-11-03T10:00:00+05:30', user: driver });
+    await settle();
+
+    expect(signedIn).toEqual(driver);
+    expect(store.user()).toEqual(driver);
+    expect(vault.stored).toBe('tok-1');
+    http.expectNone('/api/auth/login/');
+  });
+
+  it('picks the sign-in up again at start-up from the token kept on the phone', async () => {
+    vault.stored = 'tok-1';
+    const store = TestBed.inject(AuthStore);
+
+    const loaded = store.loadSession();
+    await settle();
+    const req = http.expectOne('/api/auth/session/');
+    expect(req.request.headers.get('Authorization')).toBe('Bearer tok-1');
+    req.flush({ user: makeMe({ role: 'DRIVER' }) });
+    await loaded;
+
+    expect(store.role()).toBe('DRIVER');
+  });
+
+  it('forgets a token the server no longer takes', async () => {
+    vault.stored = 'tok-old';
+    const store = TestBed.inject(AuthStore);
+
+    const loaded = store.loadSession();
+    await settle();
+    http
+      .expectOne('/api/auth/session/')
+      .flush({ detail: 'Sign in again.' }, { status: 403, statusText: 'Forbidden' });
+    await loaded;
+
+    expect(store.user()).toBeNull();
+    expect(vault.stored).toBeNull();
+  });
+
+  it('keeps the token when the server cannot be reached at start-up', async () => {
+    vault.stored = 'tok-1';
+    const store = TestBed.inject(AuthStore);
+
+    const loaded = store.loadSession();
+    await settle();
+    http.expectOne('/api/auth/session/').error(new ProgressEvent('error'), { status: 0 });
+    await loaded;
+
+    expect(store.user()).toBeNull();
+    expect(vault.stored).toBe('tok-1');
+  });
+
+  it('logging out ends the token on the server, then forgets it on the phone', async () => {
+    vault.stored = 'tok-1';
+    const store = TestBed.inject(AuthStore);
+    const loaded = store.loadSession();
+    await settle();
+    http.expectOne('/api/auth/session/').flush({ user: makeMe({ role: 'DRIVER' }) });
+    await loaded;
+
+    let done = false;
+    store.logout().subscribe(() => (done = true));
+    const req = http.expectOne('/api/auth/logout/');
+    expect(req.request.headers.get('Authorization')).toBe('Bearer tok-1');
+    req.flush(null, { status: 204, statusText: 'No Content' });
+    await settle();
+
+    expect(done).toBe(true);
+    expect(store.user()).toBeNull();
+    expect(vault.stored).toBeNull();
   });
 });

@@ -2,7 +2,7 @@ from django.db import models
 
 
 class MasterItem(models.Model):
-    """A dropdown value managed by the PTO. Rows are deactivated, never deleted."""
+    """A dropdown value managed by the PTO. One in use is switched off rather than deleted, so records keep it."""
 
     name = models.CharField(max_length=120, unique=True)
     is_active = models.BooleanField(default=True)

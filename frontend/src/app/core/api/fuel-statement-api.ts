@@ -32,13 +32,15 @@ export type StatementPumpRow = {
   litres: string;
 };
 
-/** How a police pump's tank moved: opening + received − dispensed + measured change = closing. */
+/**
+ * How a police pump's tank moved: opening + received − dispensed = closing. A tank's opening stock, set when its pump
+ * joined, counts as received in the period it was set.
+ */
 export type StatementStockRow = {
   fuel_type: FuelType;
   opening_litres: string;
   received_litres: string;
   dispensed_litres: string;
-  measured_change_litres: string;
   closing_litres: string;
 };
 

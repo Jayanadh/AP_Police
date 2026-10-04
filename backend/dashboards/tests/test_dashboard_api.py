@@ -703,7 +703,7 @@ def test_police_pump_operator_sees_stock_and_todays_fills(api):
 
     body = dashboard(operator, api)
 
-    assert set(body) == {"role", "month", "pump", "tanks", "waiting", "today_fills", "month_fills"}
+    assert set(body) == {"role", "month", "pump", "tanks", "waiting", "today_fills"}
     assert body["pump"] == {"id": pump.id, "name": "Alpha Pump", "kind": "POLICE"}
     assert [(tank["fuel_type"], tank["current_stock_litres"], tank["is_low"]) for tank in body["tanks"]] == [
         ("PETROL", "500.00", False),
@@ -715,7 +715,6 @@ def test_police_pump_operator_sees_stock_and_todays_fills(api):
     }
     assert [tank["capacity_litres"] for tank in body["tanks"]] == ["2000.00", None]
     assert body["today_fills"] == {"count": 2, "litres": "25.50"}
-    assert body["month_fills"] == {"petrol_litres": "10.00", "diesel_litres": "15.50"}
 
 
 def test_tie_up_operator_sees_no_tanks_and_how_many_vehicles_are_waiting(api):
@@ -733,10 +732,9 @@ def test_tie_up_operator_sees_no_tanks_and_how_many_vehicles_are_waiting(api):
     assert body["tanks"] == []
     assert body["waiting"] == 2  # the request whose PIN ran out is not waiting any more
     assert body["today_fills"] == {"count": 0, "litres": "0.00"}
-    assert body["month_fills"] == {"petrol_litres": "0.00", "diesel_litres": "0.00"}
 
 
-def test_pump_fills_count_from_midnight_in_kolkata_and_the_month_from_the_first():
+def test_todays_pump_fills_count_from_midnight_in_kolkata():
     unit = UnitFactory()
     pump = PumpFactory(unit=unit)
     operator = PumpStaffFactory(pump=pump, unit=unit)
@@ -752,7 +750,6 @@ def test_pump_fills_count_from_midnight_in_kolkata_and_the_month_from_the_first(
     body = summaries.pump_summary(operator, NOW)
 
     assert body["today_fills"] == {"count": 2, "litres": "3.00"}
-    assert body["month_fills"] == {"petrol_litres": "3.00", "diesel_litres": "44.00"}
 
 
 def test_pump_fills_that_were_not_filled_do_not_count():
@@ -765,4 +762,3 @@ def test_pump_fills_that_were_not_filled_do_not_count():
     body = summaries.pump_summary(operator, NOW)
 
     assert body["today_fills"] == {"count": 0, "litres": "0.00"}
-    assert body["month_fills"] == {"petrol_litres": "0.00", "diesel_litres": "0.00"}

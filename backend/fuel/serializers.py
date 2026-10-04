@@ -179,6 +179,20 @@ class DutySerializer(serializers.Serializer):
     duty_particulars = serializers.CharField(allow_blank=True, default="")
 
 
+class PumpFillSerializer(serializers.ModelSerializer):
+    """A fill as the pump's staff see it in their statement: the vehicle, the litres, when, and the officer the vehicle
+    was linked to then (`officer_name`, see `report.pump_fills`). Not the driver's duty particulars or emergency."""
+
+    registration_number = serializers.CharField(source="vehicle.registration_number", read_only=True)
+    driver_name = serializers.CharField(source="driver.full_name", read_only=True)
+    officer_name = serializers.CharField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = FuelRequest
+        fields = ["id", "registration_number", "driver_name", "fuel_type", "litres_filled", "filled_at", "officer_name"]
+        read_only_fields = fields
+
+
 class IncomingRequestSerializer(serializers.ModelSerializer):
     """A request waiting at the pump, as its staff see it in the list: who is coming, but not the litres or the PIN."""
 

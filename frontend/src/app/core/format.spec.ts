@@ -4,10 +4,10 @@ import {
   formatDate,
   formatDateTime,
   formatTime,
-  isToday,
   km,
   litres,
   monthLabel,
+  timeAgo,
 } from './format';
 
 describe('litres', () => {
@@ -89,6 +89,27 @@ describe('formatTime', () => {
   });
 });
 
+describe('timeAgo', () => {
+  const now = new Date('2026-10-04T10:30:00+05:30');
+
+  it('says just now within the minute, and for a moment a little ahead', () => {
+    expect(timeAgo('2026-10-04T10:29:31+05:30', now)).toBe('just now');
+    expect(timeAgo('2026-10-04T10:30:20+05:30', now)).toBe('just now');
+  });
+
+  it('counts minutes, then hours and minutes', () => {
+    expect(timeAgo('2026-10-04T10:29:00+05:30', now)).toBe('1 min ago');
+    expect(timeAgo('2026-10-04T10:18:00+05:30', now)).toBe('12 mins ago');
+    expect(timeAgo('2026-10-04T09:30:00+05:30', now)).toBe('1 h ago');
+    expect(timeAgo('2026-10-04T08:29:00+05:30', now)).toBe('2 h 1 min ago');
+  });
+
+  it('gives the date and time from a day back, and a dash when there is none', () => {
+    expect(timeAgo('2026-10-03T09:00:00+05:30', now)).toBe('03 Oct 2026, 9:00 am');
+    expect(timeAgo(null, now)).toBe('—');
+  });
+});
+
 describe('months', () => {
   it('labels a month', () => {
     expect(monthLabel('2026-10')).toBe('October 2026');
@@ -110,29 +131,5 @@ describe('months', () => {
     expect(currentMonth(new Date('2026-10-31T19:00:00Z'))).toBe('2026-11');
     expect(currentMonth(new Date('2026-10-31T17:00:00Z'))).toBe('2026-10');
     expect(currentMonth()).toMatch(/^\d{4}-(0[1-9]|1[0-2])$/);
-  });
-});
-
-describe('isToday', () => {
-  const now = new Date('2026-10-02T08:35:00Z');
-
-  it('is true for a moment on the same Kolkata day', () => {
-    expect(isToday('2026-10-01T18:31:00Z', now)).toBe(true);
-    expect(isToday('2026-10-02T18:29:00Z', now)).toBe(true);
-  });
-
-  it('uses the Kolkata calendar day, not UTC', () => {
-    expect(isToday('2026-10-01T18:29:00Z', now)).toBe(false);
-    expect(isToday('2026-10-02T18:31:00Z', now)).toBe(false);
-  });
-
-  it('is false for another day, for null and for invalid input', () => {
-    expect(isToday('2026-09-02T08:35:00Z', now)).toBe(false);
-    expect(isToday(null, now)).toBe(false);
-    expect(isToday('not a date', now)).toBe(false);
-  });
-
-  it('compares with the present when no moment is given', () => {
-    expect(isToday(new Date().toISOString())).toBe(true);
   });
 });

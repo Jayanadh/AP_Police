@@ -2,13 +2,14 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { StockEntry, Tank } from '../../core/api/tanks-api';
-import { currentMonth } from '../../core/format';
-import { makeTank } from '../../core/test-data';
+import { fixedClock, makeTank, stubFileSaving } from '../../core/test-data';
 import { ToastService } from '../../ui/toast';
 import { StockPage } from './stock-page';
 
-const MONTH = currentMonth();
-const entriesUrl = (tank: number) => `/api/tanks/${tank}/entries/?month=${MONTH}`;
+/** 15 October 2026 in India: the entries open on October. */
+const NOW = '2026-10-15T06:00:00Z';
+const OCTOBER = 'from=2026-10-01&to=2026-10-31';
+const entriesUrl = (tank: number, period = OCTOBER) => `/api/tanks/${tank}/entries/?${period}`;
 
 const PETROL = makeTank({
   id: 1,
@@ -16,15 +17,14 @@ const PETROL = makeTank({
   current_stock_litres: '80.00',
   is_low: true,
   capacity_litres: '3000.00',
-  last_measured_at: null,
 });
 const DIESEL = makeTank({ id: 2 });
 
 const entry = (overrides: Partial<StockEntry> = {}): StockEntry => ({
   id: 70,
-  kind: 'MEASUREMENT',
-  kind_label: 'Measurement',
-  litres: '640.00',
+  kind: 'DISPENSE',
+  kind_label: 'Fill',
+  litres: '15.00',
   stock_before: '655.00',
   stock_after: '640.00',
   note: '',
@@ -50,7 +50,7 @@ const DIESEL_ENTRIES = [
 describe('StockPage', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), fixedClock(() => NOW)],
     });
   });
 
@@ -108,73 +108,10 @@ describe('StockPage', () => {
     expect(tanks[1].querySelector('[role="meter"]')).not.toBeNull();
   });
 
-  describe('Morning measurement', () => {
-    it('offers a chip for each fuel, the first chosen', async () => {
-      const { chip } = await setup();
-      expect(chip('measure-form', 'Petrol').getAttribute('aria-pressed')).toBe('true');
-      expect(chip('measure-form', 'Diesel').getAttribute('aria-pressed')).toBe('false');
-    });
-
-    it('posts the litres to the chosen tank, shows the new stock and reads the entries again', async () => {
-      const { el, http, text, type, chip, submit, fixture } = await setup();
-      chip('measure-form', 'Diesel').click();
-      await fixture.whenStable();
-      type('#measure-litres', '640.5');
-      await submit('measure-form');
-
-      const req = http.expectOne('/api/tanks/2/measure/');
-      expect(req.request.method).toBe('POST');
-      expect(req.request.body).toEqual({ litres: 640.5, note: '' });
-      req.flush({ ...DIESEL, current_stock_litres: '640.50' });
-      await fixture.whenStable();
-      http.expectOne(entriesUrl(2)).flush(DIESEL_ENTRIES);
-      await fixture.whenStable();
-
-      expect(
-        TestBed.inject(ToastService)
-          .messages()
-          .map((toast) => toast.text),
-      ).toEqual(['Diesel stock set to 640.5 L.']);
-      const diesel = el.querySelectorAll('#tanks-card app-tank-level')[1];
-      expect(text(diesel.querySelector('.figure'))).toBe('640.5 L');
-      expect(el.querySelector<HTMLInputElement>('#measure-litres')!.value).toBe('');
-    });
-
-    it('accepts a reading of zero', async () => {
-      const { http, type, submit, fixture } = await setup();
-      type('#measure-litres', '0');
-      await submit('measure-form');
-      const req = http.expectOne('/api/tanks/1/measure/');
-      expect(req.request.body).toEqual({ litres: 0, note: '' });
-      req.flush({ ...PETROL, current_stock_litres: '0.00' });
-      await fixture.whenStable();
-      http.expectOne(entriesUrl(1)).flush([]);
-    });
-
-    it.each([
-      ['', 'Enter the litres in the tank.'],
-      ['-3', 'The stock cannot be negative.'],
-    ])('does not send %j', async (litres, message) => {
-      const { form, text, type, submit } = await setup();
-      type('#measure-litres', litres);
-      await submit('measure-form');
-      expect(text(form('measure-form').querySelector('.form-error'))).toBe(message);
-    });
-
-    it('shows the API message under the form and keeps the litres', async () => {
-      const { el, http, text, type, submit, fixture, form } = await setup();
-      type('#measure-litres', '640');
-      await submit('measure-form');
-      http
-        .expectOne('/api/tanks/1/measure/')
-        .flush({ detail: "Stock can't be negative." }, { status: 400, statusText: 'Bad Request' });
-      await fixture.whenStable();
-      expect(text(form('measure-form').querySelector('.form-error'))).toBe(
-        "Stock can't be negative.",
-      );
-      expect(el.querySelector<HTMLInputElement>('#measure-litres')!.value).toBe('640');
-      expect(TestBed.inject(ToastService).messages()).toEqual([]);
-    });
+  it('has no way to set the stock by hand: receipts add to it and fills take from it', async () => {
+    const { el } = await setup();
+    expect(el.querySelector('#measure-form')).toBeNull();
+    expect(el.textContent).not.toContain('measurement');
   });
 
   describe('Tanker receipt', () => {
@@ -206,12 +143,12 @@ describe('StockPage', () => {
       expect(el.querySelector<HTMLInputElement>('#receipt-note')!.value).toBe('');
     });
 
-    it('chooses its fuel on its own, apart from the measurement', async () => {
+    it('is sent for the fuel chosen with its chips', async () => {
       const { chip, fixture, http, type, submit } = await setup();
       chip('receipt-form', 'Diesel').click();
       await fixture.whenStable();
       expect(chip('receipt-form', 'Diesel').getAttribute('aria-pressed')).toBe('true');
-      expect(chip('measure-form', 'Petrol').getAttribute('aria-pressed')).toBe('true');
+      expect(chip('receipt-form', 'Petrol').getAttribute('aria-pressed')).toBe('false');
       type('#receipt-litres', '100');
       await submit('receipt-form');
       http.expectOne('/api/tanks/2/receive/').flush(DIESEL);
@@ -222,12 +159,19 @@ describe('StockPage', () => {
     it.each([
       ['', 'Enter the litres received.'],
       ['0', 'Enter the litres received.'],
-      ['-10', 'Enter the litres received.'],
     ])('does not send %j', async (litres, message) => {
       const { form, text, type, submit } = await setup();
       type('#receipt-litres', litres);
       await submit('receipt-form');
       expect(text(form('receipt-form').querySelector('.form-error'))).toBe(message);
+    });
+
+    it('takes the litres with up to two decimals, never below zero', async () => {
+      const { el, type } = await setup();
+      const box = el.querySelector<HTMLInputElement>('#receipt-litres')!;
+      expect(box.type).toBe('text');
+      type('#receipt-litres', '-1500.555');
+      expect(box.value).toBe('1500.55');
     });
 
     it('shows the API message under the form', async () => {
@@ -252,18 +196,45 @@ describe('StockPage', () => {
       const { el, text } = await setup();
       const sections = Array.from(el.querySelectorAll('.entries'));
       expect(sections.length).toBe(2);
-      expect(text(sections[0].querySelector('h3'))).toBe('Petrol entries this month');
-      expect(text(sections[0])).toContain('No stock entries this month.');
-      expect(text(sections[1].querySelector('h3'))).toBe('Diesel entries this month');
+      expect(text(sections[0].querySelector('h3'))).toBe('Petrol entries');
+      expect(text(sections[0])).toContain('No stock entries in this period.');
+      expect(text(sections[1].querySelector('h3'))).toBe('Diesel entries');
       const rows = Array.from(sections[1].querySelectorAll('tbody tr'));
       expect(rows.length).toBe(2);
-      expect(text(rows[0])).toContain('Measurement');
-      expect(text(rows[0])).toContain('640 L');
+      expect(text(rows[0])).toContain('Fill');
+      expect(text(rows[0])).toContain('15 L');
       expect(text(rows[0])).toContain('655 L → 640 L');
       expect(text(rows[0])).toContain('Suresh Kumar');
       expect(text(rows[0])).toContain('03 Oct 2026, 7:10 am');
       expect(text(rows[1])).toContain('Tanker receipt');
       expect(text(rows[1])).toContain('Tanker TN-1234');
+    });
+
+    it('reads the entries of another period: a month back, or a year', async () => {
+      const { el, http, fixture } = await setup();
+      const button = (label: string) =>
+        Array.from(el.querySelectorAll<HTMLButtonElement>('button')).find(
+          (b) => b.getAttribute('aria-label') === label || b.textContent?.trim() === label,
+        )!;
+
+      button('Previous month').click();
+      await fixture.whenStable();
+      http.expectOne(entriesUrl(1, 'from=2026-09-01&to=2026-09-30')).flush([]);
+      http.expectOne(entriesUrl(2, 'from=2026-09-01&to=2026-09-30')).flush([]);
+
+      button('Year').click();
+      await fixture.whenStable();
+      http.expectOne(entriesUrl(1, 'from=2026-04-01&to=2027-03-31')).flush([]);
+      http.expectOne(entriesUrl(2, 'from=2026-04-01&to=2027-03-31')).flush([]);
+    });
+
+    it('downloads the entries of the period as Excel', async () => {
+      stubFileSaving();
+      const { el, http, fixture } = await setup();
+      Array.from(el.querySelectorAll<HTMLButtonElement>('app-download-button button'))[0].click();
+      await new Promise((resolve) => setTimeout(resolve));
+      await fixture.whenStable();
+      http.expectOne(`/api/tanks/entries/export/?${OCTOBER}`).flush(new Blob(['xlsx']));
     });
 
     it('keeps the table inside a scrolling wrapper for narrow phones', async () => {

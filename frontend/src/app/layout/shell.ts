@@ -14,6 +14,8 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } fro
 import { catchError, EMPTY, filter, interval, merge, of, switchMap } from 'rxjs';
 import { NotificationsApi } from '../core/api/notifications-api';
 import { AuthStore, ROLE_LABELS } from '../core/auth-store';
+import { LiveLocation } from '../core/live-location';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { Icon } from '../ui/icon';
 import { homePathFor, navItemsFor } from './nav';
 
@@ -46,6 +48,9 @@ export class Shell {
   private readonly notifications = inject(NotificationsApi);
   private readonly injector = inject(Injector);
   private readonly pollMs = inject(UNREAD_POLL_MS);
+  /** Made here, with the signed-in frame, so a driver's live location carries on from page to page. */
+  private readonly live = inject(LiveLocation);
+  private readonly confirm = inject(ConfirmDialog);
   private readonly sheet = viewChild<ElementRef<HTMLElement>>('sheet');
   private readonly moreButton = viewChild<ElementRef<HTMLButtonElement>>('moreButton');
 
@@ -76,6 +81,10 @@ export class Shell {
     this.unread() > 0 ? `Alerts, ${this.unread()} unread` : 'Alerts',
   );
   protected readonly moreOpen = signal(false);
+  protected readonly sharing = computed(() => {
+    const state = this.live.state();
+    return state === 'on' || state === 'stopping';
+  });
 
   constructor() {
     const navigated = this.router.events.pipe(filter((event) => event instanceof NavigationEnd));
@@ -115,7 +124,16 @@ export class Shell {
     }
   }
 
-  protected logout(): void {
-    this.auth.signOut();
+  protected async logout(): Promise<void> {
+    const yes = await this.confirm.ask({
+      title: 'Log out?',
+      message: this.sharing()
+        ? 'Sharing your live location stops too.'
+        : 'You will need your login ID and password to come back in.',
+      confirmLabel: 'Log out',
+    });
+    if (yes) {
+      this.auth.signOut();
+    }
   }
 }

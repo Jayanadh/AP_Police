@@ -248,11 +248,11 @@ describe('VehicleForm', () => {
   it('leaves judging the numbers to the server, so its reason is what the user reads', async () => {
     const { http, el, fill, fillAll, fixture, submit, text } = await setup();
     await fillAll();
-    fill('vehicle-tank', '-5');
+    fill('vehicle-tank', '0');
     await fixture.whenStable();
     submit();
     const req = http.expectOne('/api/vehicles/');
-    expect(req.request.body['tank_capacity_litres']).toBe(-5);
+    expect(req.request.body['tank_capacity_litres']).toBe(0);
     req.flush(
       { tank_capacity_litres: ['Tank capacity must be more than 0.'] },
       { status: 400, statusText: 'Bad Request' },

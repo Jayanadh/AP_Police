@@ -8,8 +8,9 @@ import { addMonths, currentMonth, formatDateTime, litres, monthLabel } from '../
 import { Panel } from '../../core/panel';
 import { Icon } from '../../ui/icon';
 import { LoadError } from '../../ui/load-error';
+import { NumberField } from '../../ui/number-field';
 import { PageHeader } from '../../ui/page-header';
-import { StatCard } from '../../ui/stat-card';
+import { StatCard, StatTone } from '../../ui/stat-card';
 import { ToastService } from '../../ui/toast';
 
 const LETTER_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf'];
@@ -37,7 +38,7 @@ function letterProblem(file: File): string | null {
 /** Adding quota to a vehicle for this month or next, with the approval letter, and what was added this month. */
 @Component({
   selector: 'app-additional-quota-page',
-  imports: [Icon, LoadError, PageHeader, ReactiveFormsModule, StatCard],
+  imports: [Icon, LoadError, NumberField, PageHeader, ReactiveFormsModule, StatCard],
   templateUrl: './additional-quota-page.html',
   styles: `
     .search-card,
@@ -248,17 +249,30 @@ export class AdditionalQuotaPage {
     if (!quota) {
       return [];
     }
-    const stat = (label: string, value: string, icon: string, canBeNegative = false) => ({
+    const stat = (
+      label: string,
+      value: string,
+      icon: string,
+      tone: StatTone,
+      canBeNegative = false,
+    ) => ({
       label,
       value,
       icon,
-      negative: canBeNegative && Number(value) < 0,
+      // A figure below zero turns red, whatever its own colour.
+      tone: canBeNegative && Number(value) < 0 ? ('danger' as const) : tone,
     });
     return [
-      stat('Limit', quota.limit_litres, 'fuel'),
-      stat('Used', quota.used_litres, 'droplet'),
-      stat('Remaining', quota.remaining_litres, 'gauge', true),
-      stat('Additional quota balance', quota.additional_balance_litres, 'file-plus', true),
+      stat('Limit', quota.limit_litres, 'fuel', 'primary'),
+      stat('Used', quota.used_litres, 'droplet', 'info'),
+      stat('Remaining', quota.remaining_litres, 'gauge', 'success', true),
+      stat(
+        'Additional quota balance',
+        quota.additional_balance_litres,
+        'file-plus',
+        'violet',
+        true,
+      ),
     ];
   });
 

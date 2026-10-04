@@ -16,16 +16,21 @@ import { fuelLabel } from '../../core/api/vehicles-api';
 import { formatDateTime, litres } from '../../core/format';
 import { Panel } from '../../core/panel';
 import { LoadError } from '../../ui/load-error';
+import { NumberField } from '../../ui/number-field';
 import { StatCard } from '../../ui/stat-card';
 import { ToastService } from '../../ui/toast';
 
 const NO_THRESHOLD = 'Enter the alert level in litres, 0 or more.';
 const NEGATIVE_CAPACITY = 'The capacity cannot be negative.';
+const NO_OPENING = 'Enter the opening stock in litres, 0 or more.';
 
-/** One tank of a police pump: its stock and level, the alert level and capacity the MTO may change, and the month's stock entries. */
+/**
+ * One tank of a police pump: its stock and level, its opening stock (set once), the alert level and capacity the
+ * MTO may change, and the month's stock entries.
+ */
 @Component({
   selector: 'app-pump-tank-card',
-  imports: [LoadError, ReactiveFormsModule, StatCard],
+  imports: [LoadError, NumberField, ReactiveFormsModule, StatCard],
   templateUrl: './pump-tank-card.html',
   styles: `
     :host {
@@ -54,6 +59,27 @@ const NEGATIVE_CAPACITY = 'The capacity cannot be negative.';
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 12px;
+    }
+
+    // A new tank's first step, set apart in the brand colour so it is not missed.
+    .opening {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--primary) 14%, white);
+
+      .field {
+        width: 100%;
+        max-width: 240px;
+      }
+
+      .hint {
+        margin: 0;
+        font-size: 14px;
+      }
     }
 
     .levels {
@@ -102,7 +128,7 @@ export class PumpTankCard {
   readonly tank = input.required<PumpTank>();
   /** The month of the stock entries, "YYYY-MM". */
   readonly month = input.required<string>();
-  /** The tank as the server has it after the levels were saved. */
+  /** The tank as the server has it after its levels or opening stock were saved. */
   readonly changed = output<Tank>();
 
   protected readonly litres = litres;
@@ -121,6 +147,10 @@ export class PumpTankCard {
   });
   protected readonly saving = signal(false);
   protected readonly error = signal('');
+
+  protected readonly openingForm = this.fb.group({ litres: [null as number | null] });
+  protected readonly settingOpening = signal(false);
+  protected readonly openingError = signal('');
 
   constructor() {
     effect(() => {
@@ -178,5 +208,32 @@ export class PumpTankCard {
           this.error.set(apiErrorMessage(err));
         },
       });
+  }
+
+  /** The tank's first stock, once: from then on only tanker receipts and fills change it. */
+  protected setOpening(): void {
+    if (this.settingOpening()) {
+      return;
+    }
+    const litres = this.openingForm.controls.litres.value;
+    if (typeof litres !== 'number' || litres < 0) {
+      this.openingError.set(NO_OPENING);
+      return;
+    }
+    this.openingError.set('');
+    this.settingOpening.set(true);
+    this.api.setOpening(this.tank().id, litres, '').subscribe({
+      next: (saved) => {
+        this.settingOpening.set(false);
+        this.openingForm.reset();
+        this.toasts.show(`${this.fuel()} opening stock set.`);
+        this.changed.emit(saved);
+        this.entries.load(true);
+      },
+      error: (err) => {
+        this.settingOpening.set(false);
+        this.openingError.set(apiErrorMessage(err));
+      },
+    });
   }
 }

@@ -5,11 +5,6 @@
     }
   </app-page-header>
 
-  <a class="btn btn-primary fill-button" routerLink="/pump/fill">
-    <app-icon name="fuel" [size]="22" />
-    Fill a vehicle
-  </a>
-
   @if (dashboard.loading()) {
     <p class="muted" role="status">Loading the dashboard…</p>
   } @else if (dashboard.error()) {
@@ -24,71 +19,35 @@
         [tone]="data.waiting ? 'primary' : 'default'"
         [value]="data.waiting"
       />
-      <app-stat-card icon="fuel" label="Fills today" [value]="data.today_fills.count" />
+      <app-stat-card icon="fuel" label="Fills today" tone="info" [value]="data.today_fills.count" />
       <app-stat-card
         icon="droplet"
         label="Litres today"
+        tone="success"
         [value]="litres(data.today_fills.litres)"
       />
     </div>
   }
 
-  @if (kind() === 'POLICE') {
-    <div class="panels stacked">
-      @if (unmeasured().length) {
-        <section id="measure-warning" class="card warning-card" aria-labelledby="measure-title">
-          <div class="warning-head">
-            <app-icon name="alert-triangle" [size]="22" />
-            <h2 id="measure-title">Record this morning's stock</h2>
-          </div>
-          <p>
-            {{ unmeasured().join(' and ') }}
-            {{ unmeasured().length > 1 ? 'have' : 'has' }} not been measured today. The morning
-            measurement sets the stock the system counts down from.
-          </p>
-          <a class="btn btn-primary btn-sm" routerLink="/pump/stock">Record stock</a>
-        </section>
-      }
+  <a class="btn btn-primary fill-button" routerLink="/pump/fill">
+    <app-icon name="fuel" [size]="22" />
+    Fill a vehicle
+  </a>
 
+  @if (kind() === 'POLICE' && dashboard.data(); as data) {
+    <div class="panels stacked">
       <section id="tanks-card" class="card" aria-labelledby="tanks-title">
         <h2 id="tanks-title">Tanks</h2>
-        @if (tanks.loading()) {
-          <p class="muted" role="status">Loading the tanks…</p>
-        } @else if (tanks.error()) {
-          <app-load-error [message]="tanks.error()" (retry)="tanks.load()" small />
-        } @else if (!tanks.data()?.length) {
+        @if (!data.tanks.length) {
           <p class="muted">No tanks are set up for this pump yet. Ask your MTO.</p>
         } @else {
           <ul class="tanks">
-            @for (tank of tanks.data(); track tank.id) {
+            @for (tank of data.tanks; track tank.id) {
               <li><app-tank-level [tank]="tank" /></li>
             }
           </ul>
           <a class="btn btn-secondary btn-sm more" routerLink="/pump/stock">Open stock</a>
         }
-      </section>
-    </div>
-  } @else if (kind() === 'TIE_UP' && dashboard.data(); as data) {
-    <div class="panels">
-      <section id="month-card" class="card" aria-labelledby="month-title">
-        <h2 id="month-title">This month</h2>
-        <div class="month">
-          <app-stat-card
-            icon="fuel"
-            label="Petrol"
-            tone="primary"
-            [value]="litres(data.month_fills.petrol_litres)"
-          />
-          <app-stat-card
-            icon="fuel"
-            label="Diesel"
-            tone="primary"
-            [value]="litres(data.month_fills.diesel_litres)"
-          />
-        </div>
-        <a class="btn btn-secondary btn-sm more" routerLink="/pump/statement"
-          >Open fuel statement</a
-        >
       </section>
     </div>
   }

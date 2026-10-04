@@ -1,5 +1,6 @@
 from django.db import transaction
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q
+from django.http import Http404
 from rest_framework import generics, mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -8,9 +9,10 @@ from accounts.models import Role
 from accounts.permissions import role_required
 from accounts.views.people import PersonViewSet
 from common.months import month_bounds, parse_month
+from common.periods import parse_period
 from fleet.models import FuelType
-from pumps import services, stock
-from pumps.models import Pump, StockEntryKind
+from pumps import exports, services, stock
+from pumps.models import Pump, PumpKind, PumpTank, StockEntry
 from pumps.serializers import (
     FORMER_STAFF,
     DirectoryPumpSerializer,
@@ -20,6 +22,11 @@ from pumps.serializers import (
     StockInputSerializer,
     TankDetailSerializer,
 )
+
+
+def _has_entries() -> Exists:
+    """Whether anything was recorded for the tank yet, as a column: once it has, its opening stock is set."""
+    return Exists(StockEntry.objects.filter(tank=OuterRef("pk")))
 
 
 class PumpViewSet(
@@ -39,12 +46,13 @@ class PumpViewSet(
         return (
             Pump.objects.filter(unit=self.request.user.unit)
             .select_related("district")
-            .prefetch_related("tanks")
+            .prefetch_related(Prefetch("tanks", queryset=PumpTank.objects.annotate(opening_set=_has_entries())))
             .annotate(staff_count=Count("staff", filter=~Q(staff__status__in=FORMER_STAFF)))
         )
 
     def perform_create(self, serializer):
-        serializer.instance = services.create_pump(self.request.user.unit, **serializer.validated_data)
+        unit = self.request.user.unit
+        serializer.instance = services.create_pump(unit, district=unit.district, **serializer.validated_data)
 
     @transaction.atomic
     def perform_update(self, serializer):
@@ -80,16 +88,16 @@ class TankViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-    """Police pump tanks. Pump staff keep the stock of their own pump; the MTO sees, and sets the alert level of,
-    the tanks of their unit's pumps. Anyone else's tank is invisible (404)."""
+    """Police pump tanks. The MTO sees the tanks of their unit's pumps, sets each one's opening stock once and its
+    alert level; pump staff record tanker receipts at their own pump. Anyone else's tank is invisible (404)."""
 
     serializer_class = TankDetailSerializer
     http_method_names = ["get", "post", "patch"]
 
     def get_permissions(self):
-        if self.action == "partial_update":
+        if self.action in ("partial_update", "opening"):
             roles = (Role.MTO,)
-        elif self.action in ("measure", "receive"):
+        elif self.action in ("receive", "entries_export"):
             roles = (Role.PUMP_OPERATOR,)
         else:
             roles = (Role.MTO, Role.PUMP_OPERATOR)
@@ -100,8 +108,8 @@ class TankViewSet(
         tanks = (
             stock.police_tanks()
             .select_related("pump")
-            .annotate(last_measured_at=Max("entries__recorded_at", filter=Q(entries__kind=StockEntryKind.MEASUREMENT)))
-            .order_by("pump_id", "id")  # explicit ordering required: Max() annotation causes Django to ignore Meta.ordering
+            .annotate(opening_set=_has_entries())
+            .order_by("pump_id", "id")
         )
         if user.role == Role.PUMP_OPERATOR:
             return tanks.filter(pump=user.pump_id)
@@ -112,8 +120,8 @@ class TankViewSet(
         stock.update_levels(serializer.instance, **serializer.validated_data)
 
     @action(detail=True, methods=["post"])
-    def measure(self, request, pk=None):
-        return self._record(stock.record_measurement)
+    def opening(self, request, pk=None):
+        return self._record(stock.record_opening)
 
     @action(detail=True, methods=["post"])
     def receive(self, request, pk=None):
@@ -128,14 +136,30 @@ class TankViewSet(
 
     @action(detail=True, methods=["get"])
     def entries(self, request, pk=None):
+        """The tank's stock entries, newest first: of a period (`?from=&to=`) or of a month (`?month=YYYY-MM`, this
+        month when neither is given)."""
         tank = self.get_object()
-        start, end = month_bounds(parse_month(request.query_params.get("month")))
+        params = request.query_params
+        if "from" in params or "to" in params:
+            start, end = parse_period(params).bounds()
+        else:
+            start, end = month_bounds(parse_month(params.get("month")))
         rows = tank.entries.filter(recorded_at__gte=start, recorded_at__lt=end).select_related("recorded_by")
         return Response(StockEntrySerializer(rows, many=True).data)
 
+    @action(detail=False, methods=["get"], url_path="entries/export")
+    def entries_export(self, request):
+        """The stock entries of the staff's own pump in a period (`?from=&to=`, this month when not given), as
+        Excel."""
+        tanks = list(self.get_queryset())
+        if not tanks:
+            raise Http404("This pump keeps no stock.")
+        return exports.stock_entries(tanks[0].pump, tanks, parse_period(request.query_params))
+
 
 class PumpDirectoryView(generics.ListAPIView):
-    """Every active pump in AP, for any logged-in user: where to fill up, and what is in stock."""
+    """Every active pump in AP, for any logged-in user: where to fill up, and what is in stock. `?fuel=` keeps the
+    pumps that can fill that fuel now."""
 
     serializer_class = DirectoryPumpSerializer
     pagination_class = None
@@ -148,8 +172,9 @@ class PumpDirectoryView(generics.ListAPIView):
                 Q(name__icontains=search) | Q(address__icontains=search) | Q(district__name__icontains=search)
             )
         fuel = params.get("fuel", "").upper()
-        if fuel == FuelType.PETROL:
-            pumps = pumps.filter(sells_petrol=True)
-        elif fuel == FuelType.DIESEL:
-            pumps = pumps.filter(sells_diesel=True)
+        if fuel in (FuelType.PETROL, FuelType.DIESEL):
+            # The pumps that can fill that fuel now: a bunk that sells it, a police pump that has some in stock.
+            sells = Q(sells_petrol=True) if fuel == FuelType.PETROL else Q(sells_diesel=True)
+            in_stock = Exists(PumpTank.objects.filter(pump=OuterRef("pk"), fuel_type=fuel, current_stock_litres__gt=0))
+            pumps = pumps.filter(sells).filter(Q(kind=PumpKind.TIE_UP) | in_stock)
         return pumps

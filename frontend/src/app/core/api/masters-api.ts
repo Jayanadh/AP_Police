@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { Observable } from 'rxjs';
 
-/** A dropdown value the PTO manages. Rows are deactivated, never deleted. */
+/** A dropdown value the PTO manages. One in use is switched off; an unused one may be deleted. */
 export type MasterItem = {
   id: number;
   name: string;
@@ -31,5 +31,10 @@ export class MastersApi {
 
   update(kind: MasterKind, id: number, changes: MasterChanges): Observable<MasterItem> {
     return this.http.patch<MasterItem>(`/api/masters/${kind}/${id}/`, changes);
+  }
+
+  /** Refused, with the reason, while people, offices or pumps use the item. */
+  remove(kind: MasterKind, id: number): Observable<void> {
+    return this.http.delete<void>(`/api/masters/${kind}/${id}/`);
   }
 }

@@ -16,21 +16,21 @@
         icon="car"
         label="Active vehicles"
         [value]="dashboard.totals.vehicles_active"
-        tone="primary"
+        tone="info"
       />
       <app-stat-card icon="fuel" label="Fuel used this month" [value]="fuelText()" tone="primary" />
       <app-stat-card
         icon="gauge"
         label="Low-stock tanks"
         [value]="dashboard.totals.low_stock_tanks"
-        [tone]="dashboard.totals.low_stock_tanks > 0 ? 'danger' : 'default'"
+        [tone]="dashboard.totals.low_stock_tanks > 0 ? 'danger' : 'success'"
       />
       <a class="stat-link" routerLink="/pto/approvals">
         <app-stat-card
           icon="check-circle"
           label="Pending approvals"
           [value]="dashboard.pending_approvals"
-          [tone]="dashboard.pending_approvals > 0 ? 'warning' : 'default'"
+          [tone]="dashboard.pending_approvals > 0 ? 'warning' : 'violet'"
         />
       </a>
     </div>

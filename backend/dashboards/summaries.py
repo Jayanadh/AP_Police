@@ -11,10 +11,8 @@ from rest_framework import serializers
 from accounts.models import OfficerTransfer, Role, TransferStatus, Unit, User
 from approvals.models import ApprovalRequest, ApprovalStatus
 from common.months import IST, day_bounds, format_month, month_bounds, month_start
-from common.periods import month_period
 from fleet import odometer, servicing, services
 from fleet.models import AssignmentKind, Vehicle, VehicleStatus
-from fuel import report
 from fuel.models import EmergencyStatus, FuelRequest, RequestStatus
 from fuel.quota import ZERO, fmt, quota_for, quotas_for
 from fuel.requests import duty_due_at, duty_overdue, expire_stale, overdue_duty
@@ -214,21 +212,19 @@ def driver_summary(user: User, now: datetime) -> dict:
 
 
 def pump_summary(user: User, now: datetime) -> dict:
-    """The operator's pump: its tanks, the vehicles waiting to be filled, and today's and this month's fills."""
+    """The operator's pump: its tanks, the vehicles waiting to be filled, and today's fills."""
     pump = user.pump
     start, end = day_bounds(_today(now))
     fills = FuelRequest.objects.filter(status=RequestStatus.FILLED, pump=pump)
     today = fills.filter(filled_at__gte=start, filled_at__lt=end).aggregate(
         count=Count("pk"), litres=Sum("litres_filled")
     )
-    month = report.totals(report.bunk_fills(pump, month_period(_month(now))))
     expire_stale(now=now)
     return {
         "pump": {"id": pump.id, "name": pump.name, "kind": pump.kind},
         "tanks": _tanks(police_tanks().filter(pump=pump)),
         "waiting": FuelRequest.objects.filter(pump=pump, status=RequestStatus.ISSUED).count() if pump.is_active else 0,
         "today_fills": {"count": today["count"], "litres": fmt(today["litres"] or ZERO)},
-        "month_fills": {"petrol_litres": month["petrol_litres"], "diesel_litres": month["diesel_litres"]},
     }
 
 

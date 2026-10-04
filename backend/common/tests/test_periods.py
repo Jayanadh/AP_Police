@@ -38,7 +38,8 @@ def test_both_dates_are_needed(params):
 
 
 @pytest.mark.parametrize(
-    "value", ["2026-1-05", "05-10-2026", "2026/10/05", "yesterday", "2026-02-30", "2026-13-01", "1999-12-31", "2101-01-01"]
+    "value",
+    ["2026-1-05", "05-10-2026", "2026/10/05", "yesterday", "2026-02-30", "2026-13-01", "1999-12-31", "2101-01-01"],
 )
 def test_a_badly_written_date_is_refused(value):
     with pytest.raises(BusinessRuleError, match="^Use dates in the format YYYY-MM-DD.$"):

@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from common.months import IST, current_month
 from fleet import services
-from fleet.models import FuelType
+from fleet.models import AssignmentKind, FuelType, VehicleAssignment
 from fuel.models import FuelRequest, RequestStatus
 from notifications.models import Notification
 from testing.factories import (
@@ -21,6 +21,7 @@ from testing.factories import (
     filled_request,
     police_pump,
     tieup_pump,
+    unit_mto,
 )
 
 pytestmark = pytest.mark.django_db
@@ -207,7 +208,7 @@ def test_insufficient_police_stock_is_a_400_and_the_request_stays_open(api, vehi
 
     assert response.status_code == 400
     assert response.json() == {
-        "detail": "Only 5.00 L of diesel in stock. Record a fresh morning measurement if this is wrong."
+        "detail": "Only 5.00 L of diesel in stock."
     }
     request.refresh_from_db()
     assert request.status == RequestStatus.ISSUED
@@ -341,10 +342,33 @@ def test_pump_fills_lists_this_months_fills_at_the_callers_pump_newest_first(api
     assert response.status_code == 200
     assert ids(response) == [newest.id, older.id]
     row = response.json()[0]
-    assert set(row) == FIELDS
-    assert row["status"] == "FILLED"
-    assert row["pump"] == bunk.id
-    assert row["pin"] is None
+    # Only what the pump's table needs: not the driver's duty particulars, the emergency or the PIN.
+    assert set(row) == {
+        "id", "registration_number", "driver_name", "fuel_type", "litres_filled", "filled_at", "officer_name",
+    }
+    assert (row["registration_number"], row["litres_filled"]) == (newest.vehicle.registration_number, "10.00")
+
+
+def test_each_pump_fill_names_the_officer_the_vehicle_was_linked_to_at_the_time(api, operator, bunk, vehicle):
+    mto = unit_mto(vehicle.unit)
+    now = timezone.now()
+    first_officer = OfficerFactory(unit=vehicle.unit, full_name="S. Venkata Rao")
+    second_officer = OfficerFactory(unit=vehicle.unit, full_name="K. Lakshmi")
+    link = services.assign_person(vehicle, first_officer, mto)
+    VehicleAssignment.objects.filter(pk=link.pk).update(started_at=now - timedelta(days=3))
+    before = fill_at(vehicle, bunk, now - timedelta(days=2))
+    VehicleAssignment.objects.filter(pk=link.pk).update(ended_at=now - timedelta(days=1))
+    VehicleAssignment.objects.create(
+        vehicle=vehicle, person=second_officer, kind=AssignmentKind.OFFICER, assigned_by=mto
+    )
+    VehicleAssignment.objects.filter(person=second_officer).update(started_at=now - timedelta(hours=20))
+    after = fill_at(vehicle, bunk, now - timedelta(hours=1))
+    unlinked = fill_at(VehicleFactory(unit=vehicle.unit), bunk, now - timedelta(minutes=5))
+    api.force_login(operator)
+
+    rows = {row["id"]: row["officer_name"] for row in api.get(FILLS).json()}
+
+    assert rows == {before.id: "S. Venkata Rao", after.id: "K. Lakshmi", unlinked.id: None}
 
 
 def test_pump_fills_leaves_out_other_pumps_other_months_and_unfilled_requests(api, operator, bunk, vehicle):
@@ -419,4 +443,6 @@ def test_the_fill_response_and_the_fills_list_agree(api, operator, open_request)
     api.force_login(operator)
     filled = fill(api, open_request).json()
 
-    assert api.get(FILLS).json() == [filled]
+    [row] = api.get(FILLS).json()
+    shared = ("id", "registration_number", "driver_name", "fuel_type", "litres_filled", "filled_at")
+    assert {key: row[key] for key in shared} == {key: filled[key] for key in shared}

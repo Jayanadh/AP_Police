@@ -26,6 +26,11 @@ export const MTO_ROUTES: Routes = [
     loadComponent: () => import('./vehicle-detail-page').then((m) => m.VehicleDetailPage),
   },
   {
+    path: 'live',
+    title: 'Live tracking',
+    loadComponent: () => import('./live-tracking-page').then((m) => m.LiveTrackingPage),
+  },
+  {
     path: 'transfers',
     title: 'Transfers',
     loadComponent: () => import('./transfers-page').then((m) => m.TransfersPage),

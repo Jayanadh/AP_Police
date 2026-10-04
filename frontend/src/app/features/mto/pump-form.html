@@ -38,22 +38,6 @@
       <input id="pump-address" type="text" formControlName="address" autocomplete="off" />
     </div>
     <div class="field">
-      @if (districtList.error()) {
-        <span class="field-label">District</span>
-        <app-load-error [message]="districtList.error()" (retry)="districtList.load()" small />
-      } @else {
-        <label for="pump-district">District</label>
-        <select id="pump-district" formControlName="district">
-          <option [ngValue]="null" disabled>
-            {{ districtList.loading() ? 'Loading…' : 'Select district' }}
-          </option>
-          @for (district of districts(); track district.id) {
-            <option [ngValue]="district.id">{{ district.name }}</option>
-          }
-        </select>
-      }
-    </div>
-    <div class="field">
       <span class="field-label" id="pump-fuel-label">Fuels sold</span>
       <div class="fuel-checks" role="group" aria-labelledby="pump-fuel-label">
         @for (fuel of fuels; track fuel.key) {
@@ -84,9 +68,8 @@
         <input
           #latitudeField
           id="pump-latitude"
-          type="number"
-          inputmode="decimal"
-          step="any"
+          type="text"
+          appNumber="6"
           formControlName="latitude"
           (input)="typed(latitudeField.value, longitudeField.value)"
         />
@@ -96,9 +79,8 @@
         <input
           #longitudeField
           id="pump-longitude"
-          type="number"
-          inputmode="decimal"
-          step="any"
+          type="text"
+          appNumber="6"
           formControlName="longitude"
           (input)="typed(latitudeField.value, longitudeField.value)"
         />

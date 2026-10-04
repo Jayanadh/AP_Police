@@ -23,6 +23,7 @@ const tank = (overrides: Partial<PumpTank> = {}): PumpTank => ({
   low_stock_threshold_litres: '100.00',
   capacity_litres: '1000.00',
   is_low: false,
+  opening_set: true,
   ...overrides,
 });
 
@@ -93,8 +94,8 @@ const ELSEWHERE = person({ id: 44, username: 'pump.kvl.1', full_name: 'Kavali St
 
 const entry = (overrides: Partial<StockEntry> = {}): StockEntry => ({
   id: 1,
-  kind: 'MEASUREMENT',
-  kind_label: 'Morning measurement',
+  kind: 'OPENING',
+  kind_label: 'Opening stock',
   litres: '500.00',
   stock_before: '480.00',
   stock_after: '500.00',
@@ -295,7 +296,6 @@ describe('PumpDetailPage', () => {
       expect(s.el.querySelector('app-pump-form')).toBeNull();
       s.button('Edit')!.click();
       await s.fixture.whenStable();
-      s.http.expectOne('/api/masters/districts/?active=1').flush([]);
       await s.fixture.whenStable();
       const form = s.fixture.debugElement.query(By.css('app-pump-form'));
       expect(form.componentInstance.pump()).toMatchObject({ id: 3 });
@@ -314,7 +314,6 @@ describe('PumpDetailPage', () => {
       const s = await setup();
       s.button('Edit')!.click();
       await s.fixture.whenStable();
-      s.http.expectOne('/api/masters/districts/?active=1').flush([]);
       await s.fixture.whenStable();
       s.button('Cancel')!.click();
       await s.fixture.whenStable();
@@ -362,7 +361,7 @@ describe('PumpDetailPage', () => {
     it('reads the stock entries of this month for each tank and lists them', async () => {
       const { tanks, text } = await setup({ entries: [entry({ litres: '500.00' })] });
       for (const card of tanks()) {
-        expect(text(card.querySelector('tbody tr'))).toContain('Morning measurement');
+        expect(text(card.querySelector('tbody tr'))).toContain('Opening stock');
         expect(text(card.querySelector('tbody tr'))).toContain('Lakshmi Devi');
       }
     });
@@ -407,7 +406,6 @@ describe('PumpDetailPage', () => {
         pump: 3,
         pump_name: 'Nellore Police Pump',
         low_stock_threshold_litres: '150.00',
-        last_measured_at: null,
       };
       req.flush(saved);
       await s.fixture.whenStable();

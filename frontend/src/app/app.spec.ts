@@ -15,11 +15,12 @@ describe('App', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it('renders the router outlet and the toast host', async () => {
+  it('renders the router outlet, the confirm dialog host and the toast host', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('router-outlet')).not.toBeNull();
+    expect(el.querySelector('app-confirm-host')).not.toBeNull();
     expect(el.querySelector('app-toast-host')).not.toBeNull();
   });
 });

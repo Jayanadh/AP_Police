@@ -1,0 +1,210 @@
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+
+  @media (min-width: 1000px) {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    align-items: start;
+  }
+}
+
+h2 {
+  font-size: 18px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.round {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 22%, white);
+  color: color-mix(in srgb, var(--primary-strong) 70%, black);
+}
+
+.explain {
+  margin: 0 0 18px;
+  color: var(--muted);
+}
+
+.duty-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+}
+
+.status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 5px solid var(--success);
+
+  .head {
+    margin-bottom: 0;
+  }
+}
+
+// A green dot with a ring that grows and fades: sharing is on.
+.pulse {
+  position: relative;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0 8px;
+  border-radius: 50%;
+  background: var(--success);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 3px solid var(--success);
+    animation: pulse 1.8s ease-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &::after {
+      animation: none;
+      opacity: 0.35;
+    }
+  }
+}
+
+@keyframes pulse {
+  from {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+
+  to {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.duty {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+
+  .label {
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  p {
+    margin: 2px 0 0;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+
+  div {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+
+  dt {
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  dd {
+    margin: 2px 0 0;
+    font-size: 16px;
+    font-weight: 700;
+  }
+}
+
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+
+  app-icon {
+    margin-top: 1px;
+  }
+}
+
+.note-danger {
+  background: color-mix(in srgb, var(--danger) 10%, white);
+  color: color-mix(in srgb, var(--danger) 75%, black);
+}
+
+.note-warning {
+  margin-bottom: 16px;
+  background: color-mix(in srgb, var(--warning) 16%, white);
+  color: color-mix(in srgb, var(--warning) 45%, black);
+}
+
+.status-card .note-warning {
+  margin-bottom: 0;
+}
+
+.note-info {
+  background: color-mix(in srgb, var(--info) 10%, white);
+  color: color-mix(in srgb, var(--info) 55%, black);
+}
+
+.screen-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13.5px;
+
+  app-icon {
+    margin-top: 2px;
+  }
+}
+
+.stop {
+  display: flex;
+
+  ::ng-deep .btn {
+    width: 100%;
+  }
+}
+
+.map-card {
+  --map-height: 320px;
+  min-width: 0;
+}
+
+.settings {
+  align-self: flex-start;
+}

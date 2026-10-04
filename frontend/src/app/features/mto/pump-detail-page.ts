@@ -56,6 +56,7 @@ function toPumpTank(tank: Tank): PumpTank {
     low_stock_threshold_litres: tank.low_stock_threshold_litres,
     capacity_litres: tank.capacity_litres,
     is_low: tank.is_low,
+    opening_set: tank.opening_set,
   };
 }
 

@@ -5,14 +5,27 @@ A job that raises does not stop the others: it is reported on stderr and the com
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
+from accounts.jobs import delete_expired_device_tokens
 from fleet.jobs import alert_missing_odometer, alert_service_due
 from fuel.jobs import expire_unused_pins, remind_overdue_duty
+from tracking.jobs import end_silent_trips, forget_old_locations
 
-JOBS = (expire_unused_pins, remind_overdue_duty, alert_missing_odometer, alert_service_due)
+JOBS = (
+    expire_unused_pins,
+    remind_overdue_duty,
+    alert_missing_odometer,
+    alert_service_due,
+    end_silent_trips,
+    forget_old_locations,
+    delete_expired_device_tokens,
+)
 
 
 class Command(BaseCommand):
-    help = "Expire unused PINs, then send the overdue duty, missing odometer and service due alerts."
+    help = (
+        "Expire unused PINs, send the overdue duty, missing odometer and service due alerts, end live location "
+        "trips that went silent, forget old trips' locations and delete expired phone app sign-ins."
+    )
 
     def handle(self, *args, **options):
         now = timezone.now()

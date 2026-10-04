@@ -57,10 +57,19 @@ h2 {
     margin: 0;
   }
 
-  .vehicle-filter {
+  .vehicle-filter,
+  .fills-search {
     flex: 0 1 260px;
     margin: 0;
   }
+
+  .fills-search {
+    flex-basis: 300px;
+  }
+}
+
+.no-match {
+  margin: 12px 0 0;
 }
 
 .overdue-note {

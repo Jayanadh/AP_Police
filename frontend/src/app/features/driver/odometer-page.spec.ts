@@ -2,9 +2,9 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { OdometerReading, weekOf } from '../../core/api/odometer-api';
-import { MyVehicles, Vehicle } from '../../core/api/vehicles-api';
+import { MyVehicle, MyVehicles } from '../../core/api/vehicles-api';
 import { formatDate } from '../../core/format';
-import { makeVehicle } from '../../core/test-data';
+import { makeMyVehicle } from '../../core/test-data';
 import { ToastService } from '../../ui/toast';
 import { OdometerPage } from './odometer-page';
 
@@ -31,7 +31,9 @@ const reading = (overrides: Partial<OdometerReading> = {}): OdometerReading => (
 const LAST_WEEK = reading();
 const FIRST = reading({ id: 2, week_of: weeksAgo(2), reading_km: 12120, km_since_previous: null });
 
-const mine = (vehicles: Vehicle[] = [makeVehicle()]): MyVehicles => ({
+const mine = (
+  vehicles: MyVehicle[] = [makeMyVehicle({ latest_odometer_km: 12300 })],
+): MyVehicles => ({
   vehicles,
   mto: { unit_name: 'MTO Nellore', full_name: 'Ravi Kumar', mobile: '9876543210' },
 });
@@ -99,19 +101,33 @@ describe('OdometerPage (driver)', () => {
     expect(toasts().map((t) => t.text)).toContain('Reading saved.');
   });
 
-  it('asks for a whole number of kilometres before sending', async () => {
-    const { el, http, fill, save, text } = await setup();
-    await save();
-    expect(text(el.querySelector('.field-error'))).toBe('Enter the reading in whole kilometres.');
-    await fill('12480.5');
+  it('asks for the reading before sending', async () => {
+    const { el, http, save, text } = await setup();
     await save();
     expect(text(el.querySelector('.field-error'))).toBe('Enter the reading in whole kilometres.');
     http.expectNone(ODOMETER_URL);
   });
 
+  it('takes the reading as a whole number, with no arrows to change it', async () => {
+    const { fill, input } = await setup();
+    expect(input()!.type).toBe('text');
+    await fill('-12a480');
+    expect(input()!.value).toBe('12480');
+  });
+
+  it('will not send a reading lower than the last one', async () => {
+    const { el, http, fill, save, text } = await setup();
+    await fill('12299');
+    await save();
+    expect(text(el.querySelector('.field-error'))).toBe(
+      "The reading can't be lower than the last reading (12,300 km).",
+    );
+    http.expectNone(ODOMETER_URL);
+  });
+
   it('shows the server’s refusal', async () => {
     const { el, http, fill, save, text, fixture } = await setup();
-    await fill('100');
+    await fill('12400');
     await save();
     http
       .expectOne(ODOMETER_URL)
@@ -148,7 +164,7 @@ describe('OdometerPage (driver)', () => {
   it('says so when there are no readings yet, and guides with the onboarding reading', async () => {
     const { el, text, card } = await setup(
       [],
-      mine([makeVehicle({ odometer_at_onboarding_km: 1200 })]),
+      mine([makeMyVehicle({ odometer_at_onboarding_km: 1200 })]),
     );
     expect(text(el.querySelector('#readings-card'))).toContain('No readings yet.');
     expect(text(card())).toContain('At onboarding: 1,200 km');

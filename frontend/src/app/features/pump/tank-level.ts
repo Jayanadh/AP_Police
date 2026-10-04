@@ -1,9 +1,15 @@
 import { Component, computed, input } from '@angular/core';
 import { Tank, tankLevelPercent } from '../../core/api/tanks-api';
 import { fuelLabel } from '../../core/api/vehicles-api';
-import { formatDateTime, litres } from '../../core/format';
+import { litres } from '../../core/format';
 
-/** One tank of the staff's own pump: the fuel, the litres in stock with a Low badge, the level bar and when it was measured. */
+/** What the gauge needs of a tank: a tank on its own, or a row of the pump's dashboard. */
+export type GaugeTank = Pick<
+  Tank,
+  'fuel_type' | 'current_stock_litres' | 'low_stock_threshold_litres' | 'capacity_litres' | 'is_low'
+>;
+
+/** One tank of the staff's own pump: the fuel, the litres in stock with a Low badge, the level bar and its alert level. */
 @Component({
   selector: 'app-tank-level',
   template: `
@@ -30,7 +36,6 @@ import { formatDateTime, litres } from '../../core/format';
     </div>
     <p class="notes muted">
       <span class="alert-level">Alert below {{ litres(tank().low_stock_threshold_litres) }}</span>
-      <span class="measured">{{ measured() }}</span>
     </p>
   `,
   styles: `
@@ -70,13 +75,9 @@ import { formatDateTime, litres } from '../../core/format';
   `,
 })
 export class TankLevel {
-  readonly tank = input.required<Tank>();
+  readonly tank = input.required<GaugeTank>();
 
   protected readonly litres = litres;
   protected readonly fuel = computed(() => fuelLabel(this.tank().fuel_type));
   protected readonly percent = computed(() => tankLevelPercent(this.tank()));
-  protected readonly measured = computed(() => {
-    const at = this.tank().last_measured_at;
-    return at === null ? 'Not measured yet' : `Measured ${formatDateTime(at)}`;
-  });
 }

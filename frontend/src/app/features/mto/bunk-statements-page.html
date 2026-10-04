@@ -59,9 +59,19 @@
         <p class="muted office-name">{{ data.pump.unit_name }}</p>
       }
       <div class="totals">
-        <app-stat-card icon="fuel" label="Fills" [value]="data.fills" />
-        <app-stat-card icon="droplet" label="Petrol" [value]="litres(data.petrol_litres)" />
-        <app-stat-card icon="droplet" label="Diesel" [value]="litres(data.diesel_litres)" />
+        <app-stat-card icon="fuel" label="Fills" tone="info" [value]="data.fills" />
+        <app-stat-card
+          icon="droplet"
+          label="Petrol"
+          tone="teal"
+          [value]="litres(data.petrol_litres)"
+        />
+        <app-stat-card
+          icon="droplet"
+          label="Diesel"
+          tone="violet"
+          [value]="litres(data.diesel_litres)"
+        />
         <app-stat-card icon="fuel" label="Total" tone="primary" [value]="litres(data.litres)" />
       </div>
 

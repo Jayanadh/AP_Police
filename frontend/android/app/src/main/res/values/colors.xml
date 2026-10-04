@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's amber, for live location's notification. -->
+    <color name="live_location">#D9982B</color>
+    <!-- The pages' background (the bg token in src/styles/_tokens.scss), behind the status bar too. -->
+    <color name="page">#F5F6F8</color>
+</resources>

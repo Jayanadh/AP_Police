@@ -77,7 +77,7 @@ class PumpTank(models.Model):
 
 
 class StockEntryKind(models.TextChoices):
-    MEASUREMENT = "MEASUREMENT", "Morning measurement"
+    OPENING = "OPENING", "Opening stock"
     TANKER_RECEIPT = "TANKER_RECEIPT", "Tanker receipt"
     DISPENSE = "DISPENSE", "Fill"
 

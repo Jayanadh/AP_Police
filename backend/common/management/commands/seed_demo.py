@@ -2,8 +2,9 @@
 and last month's fills at the tie-up bunks so the statements have something to show.
 
 Safe to run again: everything is found by its natural key (login ID, office code, registration number, pump name) and
-created only when missing. A run puts every demo password back to `DEMO_PASSWORD`; it never measures a pump that
-already exists, so stock changed by fills is left alone, and it adds the history only to a database with no fills.
+created only when missing. A run puts every demo password back to `DEMO_PASSWORD`; it never resets the stock of a pump
+that already exists, so stock changed by fills is left alone, and it adds the history only to a database with no
+fills.
 """
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -149,7 +150,7 @@ class Command(BaseCommand):
             self._vehicle(unit, chair, vehicle)
         logins = [(person, unit.name) for person in people]
         for pump in office["pumps"]:
-            logins.append((self._pump(unit, pump), pump["name"]))
+            logins.append((self._pump(unit, chair, pump), pump["name"]))
         return logins
 
     def _person(self, login, role, unit):
@@ -198,7 +199,7 @@ class Command(BaseCommand):
         except BusinessRuleError as refusal:  # e.g. the demo was changed by hand since the last run
             self.stdout.write(self.style.WARNING(f"Not linked {person.username} to {vehicle}: {refusal.detail}"))
 
-    def _pump(self, unit, details):
+    def _pump(self, unit, chair, details):
         """The pump and its staff login (returned). A new police pump gets its opening stock once."""
         pump = Pump.objects.filter(unit=unit, name=details["name"]).first()
         opening = details.get("stock", {})
@@ -222,7 +223,7 @@ class Command(BaseCommand):
         )
         if created:  # after the staff exist, so a low-stock alert reaches them as well as the MTO
             for tank in pump.tanks.all():
-                stock.record_measurement(tank, opening[tank.fuel_type], operator, "Opening stock (demo)")
+                stock.record_opening(tank, opening[tank.fuel_type], chair, "Opening stock (demo)")
         return self._settle(operator)
 
     def _history(self):

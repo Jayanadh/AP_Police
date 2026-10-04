@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { FuelRequest } from '../../core/api/fuel-requests-api';
+import { FuelRequest, PumpFill } from '../../core/api/fuel-requests-api';
 import { FuelStatement } from '../../core/api/fuel-statement-api';
 import { Unit } from '../../core/api/units-api';
 import { Vehicle } from '../../core/api/vehicles-api';
@@ -293,46 +293,141 @@ describe('FuelStatementPage', () => {
     });
   });
 
-  it('reads the officer’s statement and fills, with no filters to choose', async () => {
-    const s = await setup(makeMe({ role: 'OFFICER' }));
-    await s.answer(statementUrl(OCTOBER), makeFuelStatement());
-    await s.answer(fillsUrl(OCTOBER), [WITH_DUTY]);
-    expect(s.el.querySelector('#statement-vehicle')).toBeNull();
-    expect(s.el.querySelector('#statement-unit')).toBeNull();
-    expect(s.fills()).toHaveLength(1);
+  describe('for officers and drivers', () => {
+    const tiles = (el: HTMLElement) =>
+      Array.from(el.querySelectorAll('.totals .stat-label')).map((label) =>
+        label.textContent?.trim(),
+      );
+
+    it('reads the officer’s statement and fills, with no filters to choose', async () => {
+      const s = await setup(makeMe({ role: 'OFFICER' }));
+      await s.answer(statementUrl(OCTOBER), makeFuelStatement({ by_vehicle: null }));
+      await s.answer(fillsUrl(OCTOBER), [WITH_DUTY]);
+      expect(s.el.querySelector('#statement-vehicle')).toBeNull();
+      expect(s.el.querySelector('#statement-unit')).toBeNull();
+      expect(s.fills()).toHaveLength(1);
+    });
+
+    it('shows the litres filled, the fills and the emergency litres: no petrol and diesel', async () => {
+      const s = await setup(makeMe({ role: 'DRIVER' }));
+      await s.answer(statementUrl(OCTOBER), makeFuelStatement({ by_vehicle: null }));
+      await s.answer(fillsUrl(OCTOBER), [DUE]);
+      expect(tiles(s.el)).toEqual(['Litres filled', 'Fills', 'Emergency']);
+      expect(s.tile('Emergency')).toBe('4 L');
+      expect(s.el.querySelector('#by-vehicle')).toBeNull();
+    });
+
+    it('lists each fill by how much and where, without the vehicle or driver', async () => {
+      const s = await setup(makeMe({ role: 'DRIVER' }));
+      await s.answer(statementUrl(OCTOBER), makeFuelStatement({ by_vehicle: null }));
+      const sameVehicle = { ...DUE, vehicle: 5, registration_number: 'AP39PA1234' };
+      await s.answer(fillsUrl(OCTOBER), [WITH_DUTY, sameVehicle]);
+      const [first] = s.fills();
+      expect(s.text(first.querySelector('.amount'))).toBe('40 L');
+      expect(Array.from(first.querySelectorAll('.meta span')).map((span) => s.text(span))).toEqual([
+        'Nellore Police Pump',
+        '02 Oct 2026, 2:05 pm',
+      ]);
+      expect(first.querySelector('.registration')).toBeNull();
+      expect(s.text(first)).not.toContain('Ramesh Babu');
+      expect(s.text(s.fills()[1].querySelector('.duty-badge'))).toBe('Due');
+    });
+
+    it('names the vehicle of each fill when an officer’s fills are of more than one', async () => {
+      const s = await setup(makeMe({ role: 'OFFICER' }));
+      await s.answer(statementUrl(OCTOBER), makeFuelStatement({ by_vehicle: null }));
+      await s.answer(fillsUrl(OCTOBER), [WITH_DUTY, DUE]);
+      expect(s.fills().map((fill) => s.text(fill.querySelector('.registration')))).toEqual([
+        'AP39PA1234',
+        'AP39PB5678',
+      ]);
+    });
   });
 
-  it('reads the driver’s own statement and fills', async () => {
-    const s = await setup(makeMe({ role: 'DRIVER' }));
-    await s.answer(statementUrl(OCTOBER), makeFuelStatement());
-    await s.answer(fillsUrl(OCTOBER), [DUE]);
-    expect(s.text(s.fills()[0].querySelector('.duty-badge'))).toBe('Due');
-  });
-
-  it('shows police pump staff each tank’s stock and the fills at the pump, without duty particulars', async () => {
-    const s = await setup(
-      makeMe({ role: 'PUMP_OPERATOR', pump: 3, pump_kind: 'POLICE', unit: null }),
-    );
-    await s.answer(
-      statementUrl(OCTOBER),
-      makeFuelStatement({
-        by_pump: null,
-        stock: [
-          {
-            fuel_type: 'PETROL',
-            opening_litres: '500.00',
-            received_litres: '300.00',
-            dispensed_litres: '20.00',
-            measured_change_litres: '-10.00',
-            closing_litres: '770.00',
-          },
-        ],
+  describe('for pump staff', () => {
+    const pumpFill = (overrides: Partial<PumpFill> = {}): PumpFill => ({
+      id: 1,
+      registration_number: 'AP39PA1234',
+      driver_name: 'Ramesh Babu',
+      fuel_type: 'DIESEL',
+      litres_filled: '40.00',
+      filled_at: '2026-10-02T14:05:00+05:30',
+      officer_name: 'S. Venkata Rao',
+      ...overrides,
+    });
+    const FILLS = [
+      pumpFill(),
+      pumpFill({
+        id: 2,
+        registration_number: 'AP07PB2001',
+        litres_filled: '15.50',
+        filled_at: '2026-10-03T09:30:00+05:30',
+        officer_name: 'K. Lakshmi',
       }),
-    );
-    await s.answer(`/api/fuel/pump-fills/?${OCTOBER}`, [WITH_DUTY]);
-    expect(s.rows('stock')).toEqual([['Petrol', '500 L', '+300 L', '−20 L', '−10 L', '770 L']]);
-    expect(s.el.querySelector('#by-pump')).toBeNull();
-    expect(s.fills()).toHaveLength(1);
-    expect(s.fills()[0].querySelector('.duty')).toBeNull();
+      pumpFill({ id: 3, registration_number: 'AP39PA9999', officer_name: null }),
+    ];
+
+    async function police() {
+      const s = await setup(
+        makeMe({ role: 'PUMP_OPERATOR', pump: 3, pump_kind: 'POLICE', unit: null }),
+      );
+      await s.answer(
+        statementUrl(OCTOBER),
+        makeFuelStatement({
+          by_vehicle: null,
+          by_pump: null,
+          stock: [
+            {
+              fuel_type: 'PETROL',
+              opening_litres: '500.00',
+              received_litres: '300.00',
+              dispensed_litres: '20.00',
+              closing_litres: '780.00',
+            },
+          ],
+        }),
+      );
+      await s.answer(`/api/fuel/pump-fills/?${OCTOBER}`, FILLS);
+      return s;
+    }
+
+    it('shows each tank’s stock, and the totals without the emergency litres', async () => {
+      const s = await police();
+      expect(s.rows('stock')).toEqual([['Petrol', '500 L', '+300 L', '−20 L', '780 L']]);
+      expect(
+        Array.from(s.el.querySelectorAll('.totals .stat-label')).map((l) => l.textContent?.trim()),
+      ).toEqual(['Litres filled', 'Fills', 'Petrol', 'Diesel']);
+      expect(s.el.querySelector('#by-vehicle')).toBeNull();
+      expect(s.el.querySelector('#by-pump')).toBeNull();
+    });
+
+    it('lists the fills in one table: vehicle, litres, date and time, and the officer', async () => {
+      const s = await police();
+      expect(
+        Array.from(s.el.querySelectorAll('#pump-fills thead th')).map((th) => s.text(th)),
+      ).toEqual(['Vehicle', 'Litres', 'Date and time', 'Officer']);
+      expect(s.rows('pump-fills')).toEqual([
+        ['AP39PA1234', '40 L', '02 Oct 2026, 2:05 pm', 'S. Venkata Rao'],
+        ['AP07PB2001', '15.5 L', '03 Oct 2026, 9:30 am', 'K. Lakshmi'],
+        ['AP39PA9999', '40 L', '02 Oct 2026, 2:05 pm', '—'],
+      ]);
+      expect(s.el.querySelector('.emergency-badge')).toBeNull();
+    });
+
+    it('finds the fills of a vehicle or an officer', async () => {
+      const s = await police();
+      const search = s.el.querySelector<HTMLInputElement>('#fills-search')!;
+      const find = async (words: string) => {
+        search.value = words;
+        search.dispatchEvent(new Event('input'));
+        await s.fixture.whenStable();
+        return s.rows('pump-fills').map((row) => row[0]);
+      };
+
+      expect(await find('ap07 pb')).toEqual(['AP07PB2001']);
+      expect(await find('venkata')).toEqual(['AP39PA1234']);
+      expect(await find('nobody')).toEqual([]);
+      expect(s.text(s.el.querySelector('#fills'))).toContain('No fill matches “nobody”.');
+    });
   });
 });

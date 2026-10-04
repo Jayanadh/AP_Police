@@ -1,25 +1,40 @@
-import { Component, computed, inject, signal, WritableSignal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
-import { Observable, tap } from 'rxjs';
+import { tap } from 'rxjs';
 import { apiErrorMessage } from '../../core/api-error';
-import { StockEntry, Tank, TanksApi } from '../../core/api/tanks-api';
+import { STOCK_ENTRIES_EXPORT, StockEntry, Tank, TanksApi } from '../../core/api/tanks-api';
 import { fuelLabel } from '../../core/api/vehicles-api';
-import { currentMonth, formatDateTime, litres } from '../../core/format';
+import { NOW } from '../../core/clock';
+import { formatDateTime, litres } from '../../core/format';
 import { Panel } from '../../core/panel';
+import { Period, periodOf, todayIso } from '../../core/period';
+import { DownloadButton } from '../../ui/download-button';
 import { EmptyState } from '../../ui/empty-state';
 import { LoadError } from '../../ui/load-error';
+import { NumberField } from '../../ui/number-field';
 import { PageHeader } from '../../ui/page-header';
+import { PeriodPicker } from '../../ui/period-picker';
 import { ToastService } from '../../ui/toast';
 import { TankLevel } from './tank-level';
 
-const NO_READING = 'Enter the litres in the tank.';
-const NEGATIVE_READING = 'The stock cannot be negative.';
 const NO_RECEIPT = 'Enter the litres received.';
 
-/** The police pump's stock: its tanks, the morning measurement, tanker receipts and the month's stock entries. */
+/**
+ * The police pump's stock: its tanks, tanker receipts and the stock entries of any period, which download as Excel.
+ * The stock is never measured or set here: receipts add to it, fills take from it, and the MTO set where it started.
+ */
 @Component({
   selector: 'app-stock-page',
-  imports: [EmptyState, LoadError, PageHeader, ReactiveFormsModule, TankLevel],
+  imports: [
+    DownloadButton,
+    EmptyState,
+    LoadError,
+    NumberField,
+    PageHeader,
+    PeriodPicker,
+    ReactiveFormsModule,
+    TankLevel,
+  ],
   templateUrl: './stock-page.html',
   styles: `
     h2 {
@@ -79,8 +94,7 @@ const NO_RECEIPT = 'Enter the litres received.';
       font-weight: 600;
     }
 
-    // The ids outrank the design system's .field input rule.
-    #measure-litres,
+    // The id outranks the design system's .field input rule.
     #receipt-litres {
       height: 56px;
       padding-right: 44px;
@@ -105,6 +119,15 @@ const NO_RECEIPT = 'Enter the litres received.';
       font-size: 13px;
     }
 
+    .entries-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px 16px;
+      margin-bottom: 16px;
+    }
+
     td.number {
       font-variant-numeric: tabular-nums;
     }
@@ -119,38 +142,33 @@ export class StockPage {
   protected readonly fuelLabel = fuelLabel;
   protected readonly formatDateTime = formatDateTime;
 
-  private readonly month = currentMonth();
+  protected readonly exportUrl = STOCK_ENTRIES_EXPORT;
+  /** The period of the entries shown, and downloaded: this month to start with. */
+  protected readonly period = signal<Period>(periodOf('month', todayIso(inject(NOW)())));
+  protected readonly downloadParams = computed(() => ({
+    from: this.period().from,
+    to: this.period().to,
+  }));
   private readonly entries = new Map<number, Panel<StockEntry[]>>();
   protected readonly tanks = new Panel<Tank[]>(() =>
     this.api.list().pipe(tap((list) => this.readEntries(list))),
   );
 
-  /** The tank each form is for; until one is chosen, the first. */
-  private readonly measureChoice = signal<number | null>(null);
+  /** The tank the receipt is for; until one is chosen, the first. */
   private readonly receiptChoice = signal<number | null>(null);
-  protected readonly measureId = computed(
-    () => this.measureChoice() ?? this.tanks.data()?.[0]?.id ?? null,
-  );
   protected readonly receiptId = computed(
     () => this.receiptChoice() ?? this.tanks.data()?.[0]?.id ?? null,
   );
 
-  protected readonly measureForm = this.fb.group({ litres: [null as number | null] });
   protected readonly receiptForm = this.fb.group({
     litres: [null as number | null],
     note: [''],
   });
-  protected readonly measureError = signal('');
   protected readonly receiptError = signal('');
-  protected readonly measuring = signal(false);
   protected readonly receiving = signal(false);
 
   constructor() {
     this.tanks.load();
-  }
-
-  protected chooseForMeasurement(id: number): void {
-    this.measureChoice.set(id);
   }
 
   protected chooseForReceipt(id: number): void {
@@ -161,32 +179,11 @@ export class StockPage {
     return this.entries.get(tank.id)!;
   }
 
-  protected measure(): void {
-    const tank = this.tankFor(this.measureId());
-    if (this.measuring() || !tank) {
-      return;
+  protected choosePeriod(period: Period): void {
+    this.period.set(period);
+    for (const panel of this.entries.values()) {
+      panel.load();
     }
-    const amount = this.measureForm.controls.litres.value;
-    if (amount === null) {
-      this.measureError.set(NO_READING);
-      return;
-    }
-    if (amount < 0) {
-      this.measureError.set(NEGATIVE_READING);
-      return;
-    }
-    this.measureError.set('');
-    this.measuring.set(true);
-    this.record(this.api.measure(tank.id, amount, ''), {
-      busy: this.measuring,
-      error: this.measureError,
-      done: (saved) => {
-        this.measureForm.reset();
-        this.toasts.show(
-          `${fuelLabel(saved.fuel_type)} stock set to ${litres(saved.current_stock_litres)}.`,
-        );
-      },
-    });
   }
 
   protected receive(): void {
@@ -201,14 +198,20 @@ export class StockPage {
     }
     this.receiptError.set('');
     this.receiving.set(true);
-    this.record(this.api.receive(tank.id, amount, note.trim()), {
-      busy: this.receiving,
-      error: this.receiptError,
-      done: (saved) => {
+    this.api.receive(tank.id, amount, note.trim()).subscribe({
+      next: (saved) => {
+        this.receiving.set(false);
         this.receiptForm.reset();
+        // The tank shows its new stock and its entries are read again.
+        this.tanks.set((this.tanks.data() ?? []).map((one) => (one.id === saved.id ? saved : one)));
+        this.entries.get(saved.id)?.load(true);
         this.toasts.show(
           `Received ${litres(amount)} of ${fuelLabel(saved.fuel_type).toLowerCase()}.`,
         );
+      },
+      error: (err) => {
+        this.receiving.set(false);
+        this.receiptError.set(apiErrorMessage(err));
       },
     });
   }
@@ -217,37 +220,12 @@ export class StockPage {
     return this.tanks.data()?.find((tank) => tank.id === id);
   }
 
-  /** Sends one stock change; on success the tank shows the new stock and its entries are read again. */
-  private record(
-    call: Observable<Tank>,
-    handlers: {
-      busy: WritableSignal<boolean>;
-      error: WritableSignal<string>;
-      done: (saved: Tank) => void;
-    },
-  ): void {
-    call.subscribe({
-      next: (saved) => {
-        handlers.busy.set(false);
-        this.tanks.set(
-          (this.tanks.data() ?? []).map((tank) => (tank.id === saved.id ? saved : tank)),
-        );
-        this.entries.get(saved.id)?.load(true);
-        handlers.done(saved);
-      },
-      error: (err) => {
-        handlers.busy.set(false);
-        handlers.error.set(apiErrorMessage(err));
-      },
-    });
-  }
-
-  /** Reads this month's entries of each tank, in a panel of its own so one failing leaves the rest. */
+  /** Reads each tank's entries of the period, in a panel of its own so one failing leaves the rest. */
   private readEntries(tanks: Tank[]): void {
     for (const tank of tanks) {
       let panel = this.entries.get(tank.id);
       if (!panel) {
-        panel = new Panel(() => this.api.entries(tank.id, this.month));
+        panel = new Panel(() => this.api.entriesIn(tank.id, this.period()));
         this.entries.set(tank.id, panel);
       }
       panel.load();

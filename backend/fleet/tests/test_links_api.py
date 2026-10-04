@@ -6,8 +6,10 @@ from fleet.models import VehicleAssignment, VehicleStatus
 from testing.factories import (
     DriverFactory,
     MTOFactory,
+    OdometerReadingFactory,
     OfficerFactory,
     PTOFactory,
+    ServiceRecordFactory,
     UnitFactory,
     VehicleFactory,
 )
@@ -309,6 +311,24 @@ def test_a_driver_sees_their_vehicle_with_the_officer(api, mto, vehicle):
     assert body["vehicles"][0]["current_officer"]["id"] == officer.id
     assert body["vehicles"][0]["current_driver"]["id"] == driver.id
     assert body["mto"]["unit_name"] == mto.unit.name
+
+
+def test_each_vehicle_says_the_lowest_odometer_reading_it_can_take_next(api, mto):
+    """The highest figure on record: the onboarding reading, the newest Sunday reading or the newest service's."""
+    fresh = VehicleFactory(unit=mto.unit, odometer_at_onboarding_km=12000)
+    read = VehicleFactory(unit=mto.unit, odometer_at_onboarding_km=12000)
+    serviced = VehicleFactory(unit=mto.unit, odometer_at_onboarding_km=12000)
+    OdometerReadingFactory(vehicle=read, reading_km=12500)
+    OdometerReadingFactory(vehicle=serviced, reading_km=12500)
+    ServiceRecordFactory(vehicle=serviced, odometer_km=13100)
+    officer = OfficerFactory(unit=mto.unit)
+    for vehicle in (fresh, read, serviced):
+        services.assign_person(vehicle, officer, mto)
+    api.force_login(officer)
+
+    vehicles = api.get("/api/me/vehicles/").json()["vehicles"]
+
+    assert {v["id"]: v["latest_odometer_km"] for v in vehicles} == {fresh.id: 12000, read.id: 12500, serviced.id: 13100}
 
 
 def test_a_person_with_no_vehicle_gets_an_empty_list_and_the_contact(api, mto):

@@ -5,22 +5,30 @@ import { FuelType, fuelLabel, MyVehicles, VehiclesApi } from '../../core/api/veh
 import { distanceKm, formatDistance, GeoService, LatLng } from '../../core/geo';
 import { Panel } from '../../core/panel';
 import { EmptyState } from '../../ui/empty-state';
-import { HeroIllustration } from '../../ui/hero-illustration';
+import { FuelFlowScene } from '../../ui/fuel-flow-scene';
 import { Icon } from '../../ui/icon';
 import { LoadError } from '../../ui/load-error';
 import { StatCard } from '../../ui/stat-card';
 
-type FuelChip = { value: FuelType; label: string; available: boolean };
+/** A fuel the pump sells, and whether a police pump has it in stock (a tie-up bunk keeps no stock). */
+type FuelChip = { value: FuelType; label: string; inStock: boolean };
 
-/** Whether the fuel is sold at the pump and, at a police pump, in stock. */
-function isAvailable(pump: DirectoryPump, fuel: FuelType): boolean {
+function sells(pump: DirectoryPump, fuel: FuelType): boolean {
+  return fuel === 'PETROL' ? pump.sells_petrol : pump.sells_diesel;
+}
+
+/** Whether the pump can fill the fuel now: a bunk that sells it, a police pump that has it in stock. */
+function canFill(pump: DirectoryPump, fuel: FuelType): boolean {
   return fuel === 'PETROL' ? pump.petrol_available : pump.diesel_available;
 }
 
-/** One pump, like the reference app's station screen: where it is, the way there, its fuels, and Fill Up. */
+/**
+ * One pump, like the reference app's station screen: where it is, the way there, its fuels, and Fill Up when it can
+ * fill the driver's vehicle now.
+ */
 @Component({
   selector: 'app-driver-pump-detail-page',
-  imports: [EmptyState, HeroIllustration, Icon, LoadError, RouterLink, StatCard],
+  imports: [EmptyState, FuelFlowScene, Icon, LoadError, RouterLink, StatCard],
   templateUrl: './pump-detail-page.html',
   styleUrl: './pump-detail-page.scss',
 })
@@ -61,25 +69,28 @@ export class PumpDetailPage {
     return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
   });
 
+  /** The fuels the pump sells. */
   protected readonly fuels = computed<FuelChip[]>(() => {
     const pump = this.pump();
     if (!pump) {
       return [];
     }
-    return (['PETROL', 'DIESEL'] as const).map((value) => ({
-      value,
-      label: fuelLabel(value),
-      available: isAvailable(pump, value),
-    }));
+    return (['PETROL', 'DIESEL'] as const)
+      .filter((value) => sells(pump, value))
+      .map((value) => ({ value, label: fuelLabel(value), inStock: canFill(pump, value) }));
   });
 
-  /** The vehicle's fuel, when this pump cannot give it now. */
-  protected readonly missingFuel = computed(() => {
+  /** Why this pump cannot fill the driver's vehicle now, or '' when it can. */
+  protected readonly cannotFill = computed(() => {
     const pump = this.pump();
     const vehicle = this.vehicle();
-    return pump && vehicle && !isAvailable(pump, vehicle.fuel_type)
-      ? fuelLabel(vehicle.fuel_type)
-      : '';
+    if (!pump || !vehicle || canFill(pump, vehicle.fuel_type)) {
+      return '';
+    }
+    const fuel = fuelLabel(vehicle.fuel_type).toLowerCase();
+    return sells(pump, vehicle.fuel_type)
+      ? `${pump.name} has no ${fuel} in stock now.`
+      : `${pump.name} does not sell ${fuel}.`;
   });
 
   constructor() {

@@ -13,7 +13,7 @@ import { Panel } from '../../core/panel';
 import { usage } from '../../core/usage';
 import { LoadError } from '../../ui/load-error';
 import { PageHeader } from '../../ui/page-header';
-import { StatCard } from '../../ui/stat-card';
+import { StatCard, StatTone } from '../../ui/stat-card';
 import { StatusBadge } from '../../ui/status-badge';
 
 type Tile = {
@@ -23,6 +23,8 @@ type Tile = {
   count: number;
   /** The tone the tile takes while the count is above zero. */
   alert: 'warning' | 'danger';
+  /** Its own colour while nothing is waiting. */
+  calm: StatTone;
 };
 
 /** The MTO's home: what needs attention, this month's fuel, the police pumps' stock and the vehicles. */
@@ -183,6 +185,7 @@ export class MtoDashboard {
         link: '/mto/emergencies',
         count: data.pending_emergencies,
         alert: 'danger',
+        calm: 'teal',
       },
       {
         label: 'Overdue duty particulars',
@@ -190,6 +193,7 @@ export class MtoDashboard {
         link: '/mto/fuel',
         count: data.overdue_duty,
         alert: 'danger',
+        calm: 'violet',
       },
       {
         label: 'Missing odometer',
@@ -197,6 +201,7 @@ export class MtoDashboard {
         link: '/mto/odometer',
         count: data.missing_odometer,
         alert: 'warning',
+        calm: 'info',
       },
       {
         label: 'Services due',
@@ -204,6 +209,7 @@ export class MtoDashboard {
         link: '/mto/servicing',
         count: data.services_due,
         alert: 'warning',
+        calm: 'success',
       },
       {
         label: 'Transfers to decide',
@@ -211,6 +217,7 @@ export class MtoDashboard {
         link: '/mto/transfers',
         count: data.transfers_to_decide,
         alert: 'warning',
+        calm: 'default',
       },
     ];
   });

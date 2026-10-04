@@ -93,7 +93,7 @@ def test_deactivating_a_pump_hides_it_from_the_directory(api):
     assert names(api.get("/api/pump-directory/")) == [pump.name]
 
 
-def test_fuel_filter_keeps_only_pumps_that_sell_that_fuel(driver_api):
+def test_fuel_filter_keeps_only_bunks_that_sell_that_fuel(driver_api):
     PumpFactory(name="Petrol Only", unit=UnitFactory(), kind=PumpKind.TIE_UP, sells_diesel=False)
     PumpFactory(name="Both Fuels", unit=UnitFactory(), kind=PumpKind.TIE_UP)
     PumpFactory(name="Diesel Only", unit=UnitFactory(), kind=PumpKind.TIE_UP, sells_petrol=False)
@@ -103,11 +103,18 @@ def test_fuel_filter_keeps_only_pumps_that_sell_that_fuel(driver_api):
     assert len(driver_api.get("/api/pump-directory/").json()) == 3
 
 
-def test_fuel_filter_still_lists_a_police_pump_that_is_out_of_stock(driver_api):
-    police_pump(UnitFactory(), petrol=Decimal("0"), diesel=Decimal("0"))
-    rows = driver_api.get(f"/api/pump-directory/?fuel={FuelType.DIESEL}").json()
-    assert len(rows) == 1
-    assert rows[0]["diesel_available"] is False
+def test_fuel_filter_leaves_out_a_police_pump_without_that_fuel_in_stock(driver_api):
+    """A driver is shown only the pumps that can fill their vehicle now."""
+    dry = police_pump(UnitFactory(), petrol=Decimal("10"), diesel=Decimal("0"))
+    dry.name = "Dry Diesel"
+    dry.save()
+    stocked = police_pump(UnitFactory(), petrol=Decimal("0"), diesel=Decimal("50"))
+    stocked.name = "Has Diesel"
+    stocked.save()
+
+    assert names(driver_api.get(f"/api/pump-directory/?fuel={FuelType.DIESEL}")) == ["Has Diesel"]
+    assert names(driver_api.get(f"/api/pump-directory/?fuel={FuelType.PETROL}")) == ["Dry Diesel"]
+    assert names(driver_api.get("/api/pump-directory/")) == ["Dry Diesel", "Has Diesel"]
 
 
 def test_search_matches_name_address_or_district(driver_api):

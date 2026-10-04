@@ -5,7 +5,7 @@ import { provideRouter } from '@angular/router';
 import { DirectoryPump } from '../../core/api/pumps-api';
 import { MyVehicles } from '../../core/api/vehicles-api';
 import { GeoService, LatLng } from '../../core/geo';
-import { makeVehicle } from '../../core/test-data';
+import { makeMyVehicle } from '../../core/test-data';
 import { PumpDetailPage } from './pump-detail-page';
 
 const HERE: LatLng = { lat: 14.4426, lng: 79.9865 };
@@ -41,7 +41,17 @@ const DRY = pump({
   diesel_available: false,
 });
 
-const MINE = (vehicles = [makeVehicle({ fuel_type: 'DIESEL' })]): MyVehicles => ({
+// A tie-up bunk that sells petrol only. A bunk keeps no stock: it either sells a fuel or it does not.
+const KAVALI = pump({
+  id: 9,
+  name: 'Kavali Bunk',
+  kind: 'TIE_UP',
+  kind_label: 'Tie-up bunk',
+  sells_diesel: false,
+  diesel_available: false,
+});
+
+const MINE = (vehicles = [makeMyVehicle({ fuel_type: 'DIESEL' })]): MyVehicles => ({
   vehicles,
   mto: { unit_name: 'MTO Nellore', full_name: 'Ravi Kumar', mobile: '9876543210' },
 });
@@ -51,7 +61,7 @@ describe('PumpDetailPage', () => {
 
   async function setup(
     id = '3',
-    rows: DirectoryPump[] | 'fail' = [NELLORE, DRY],
+    rows: DirectoryPump[] | 'fail' = [NELLORE, DRY, KAVALI],
     mine: MyVehicles = MINE(),
     here: LatLng | null = HERE,
   ) {
@@ -100,7 +110,7 @@ describe('PumpDetailPage', () => {
     expect(text(el.querySelector('.location'))).toContain('Police Lines, Nellore');
     expect(text(el.querySelector('.location'))).toContain('Nellore');
     expect(link('Back to pumps')!.getAttribute('href')).toBe('/driver/pumps');
-    expect(el.querySelector('.hero app-hero-illustration')).not.toBeNull();
+    expect(el.querySelector('.hero app-fuel-flow-scene')).not.toBeNull();
   });
 
   it('opens Google Maps directions to the pump in a new tab', async () => {
@@ -124,26 +134,42 @@ describe('PumpDetailPage', () => {
     expect(text(stat('Distance')!.querySelector('.stat-value'))).toBe('—');
   });
 
-  it('shows the fuels in amber when they are available and grey when they are not', async () => {
+  it('shows which fuels a police pump has in stock', async () => {
     const { el, text, chips } = await setup('8');
     expect(text(el.querySelector('h1'))).toBe('Ongole Police Pump');
+    expect(text(el.querySelector('.fuels-title'))).toBe('Fuel in stock');
     const [petrol, diesel] = chips();
-    expect(text(petrol)).toBe('Petrol available');
+    expect(text(petrol)).toBe('Petrol in stock');
     expect(petrol.classList).toContain('active');
-    expect(text(diesel)).toBe('Diesel not available');
+    expect(text(diesel)).toBe('Diesel out of stock');
     expect(diesel.classList).not.toContain('active');
     expect(diesel.classList).toContain('unavailable');
-    expect(text(diesel.querySelector('.sr-only'))).toBe('not available');
   });
 
-  it('warns when the vehicle’s fuel is not available here', async () => {
-    const dry = await setup('8');
-    expect(dry.text(dry.el.querySelector('.fuel-warning'))).toBe(
-      'Diesel is not available here right now.',
+  it('shows only the fuels a tie-up bunk sells, with no talk of stock', async () => {
+    const { el, text, chips } = await setup('9');
+    expect(text(el.querySelector('.fuels-title'))).toBe('Fuels sold');
+    expect(chips().map((chip) => text(chip))).toEqual(['Petrol']);
+    expect(el.textContent).not.toContain('available');
+    expect(el.textContent).not.toContain('stock');
+  });
+
+  it('says why a police pump cannot fill the vehicle now, and offers no Fill Up', async () => {
+    const { el, text, link } = await setup('8');
+    expect(text(el.querySelector('.fuel-warning'))).toBe(
+      'Ongole Police Pump has no diesel in stock now.',
     );
+    expect(link('Fill Up')).toBeUndefined();
+    expect(link('Other pumps')!.getAttribute('href')).toBe('/driver/pumps');
   });
 
-  it('has no warning when the vehicle’s fuel is available', async () => {
+  it('says a tie-up bunk does not sell the vehicle’s fuel, and offers no Fill Up', async () => {
+    const { el, text, link } = await setup('9');
+    expect(text(el.querySelector('.fuel-warning'))).toBe('Kavali Bunk does not sell diesel.');
+    expect(link('Fill Up')).toBeUndefined();
+  });
+
+  it('has no warning when the pump can fill the vehicle', async () => {
     const { el } = await setup();
     expect(el.querySelector('.fuel-warning')).toBeNull();
   });

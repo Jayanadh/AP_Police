@@ -34,6 +34,11 @@ class Period:
         )
 
     @property
+    def file_part(self) -> str:
+        """For a download's file name: "2026-09-01-to-2026-09-30"."""
+        return f"{self.start.isoformat()}-to-{self.end.isoformat()}"
+
+    @property
     def label(self) -> str:
         """How people say it: "03 Oct 2026", "October 2026", "FY 2026-27" or "28 Sep – 04 Oct 2026"."""
         if self.start == self.end:

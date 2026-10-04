@@ -2,12 +2,14 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { Provider } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { onTestFinished, vi } from 'vitest';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { BunkStatement } from './api/bunk-statement-api';
 import { FuelRequest } from './api/fuel-requests-api';
 import { FuelStatement } from './api/fuel-statement-api';
 import { MonitorDriver, MonitorPage, MonitorPerson, MonitorVehicle } from './api/monitor-api';
 import { Tank } from './api/tanks-api';
-import { Vehicle } from './api/vehicles-api';
+import { Trip } from './api/tracking-api';
+import { MyVehicle, Vehicle } from './api/vehicles-api';
 import { AuthStore, Me } from './auth-store';
 import { NOW } from './clock';
 
@@ -42,6 +44,12 @@ export async function signInAs(user: Me | null): Promise<void> {
   const loaded = TestBed.inject(AuthStore).loadSession();
   TestBed.inject(HttpTestingController).expectOne('/api/auth/session/').flush({ user });
   await loaded;
+}
+
+/** A vehicle as its driver or officer sees it, with the lowest odometer reading it may take next. */
+export function makeMyVehicle(overrides: Partial<MyVehicle> = {}): MyVehicle {
+  const vehicle = makeVehicle(overrides);
+  return { latest_odometer_km: vehicle.odometer_at_onboarding_km, ...vehicle, ...overrides };
 }
 
 /** An active diesel jeep with no one linked; override only what a test cares about. */
@@ -116,7 +124,7 @@ export function makeTank(overrides: Partial<Tank> = {}): Tank {
     low_stock_threshold_litres: '100.00',
     capacity_litres: '5000.00',
     is_low: false,
-    last_measured_at: '2026-10-03T07:10:00+05:30',
+    opening_set: true,
     ...overrides,
   };
 }
@@ -271,6 +279,27 @@ export function monitorPage<T>(
   return { count: results.length, page: 1, pages: 1, page_size: 50, results, ...overrides };
 }
 
+/** A driver's open trip, last seen a minute ago; override only what a test cares about. */
+export function makeTrip(overrides: Partial<Trip> = {}): Trip {
+  return {
+    id: 41,
+    driver: 12,
+    driver_name: 'Ravi Kumar',
+    vehicle: 5,
+    registration_number: 'AP39PA1001',
+    duty_particulars: 'Night patrol, Kavali highway',
+    started_at: '2026-10-04T09:00:00+05:30',
+    ended_at: null,
+    end_reason: '',
+    last_point_at: '2026-10-04T09:59:00+05:30',
+    latitude: 14.4426,
+    longitude: 79.9865,
+    accuracy_m: 8,
+    is_open: true,
+    ...overrides,
+  };
+}
+
 /**
  * Makes the components read `read()` as the current moment (an ISO string), so a spec does not depend on the hour it
  * runs at. The function is read on every use: a spec may move the moment before it sets up a page.
@@ -280,10 +309,11 @@ export function fixedClock(read: () => string): Provider {
 }
 
 /**
- * Lets a spec press a Download button: the browser's file saving is stubbed out for this test and put back after
- * it, whether it passes or fails.
+ * Lets a spec press a Download button: its question is answered yes, and the browser's file saving is stubbed out
+ * for this test and put back after it, whether it passes or fails.
  */
 export function stubFileSaving(): void {
+  const ask = vi.spyOn(ConfirmDialog.prototype, 'ask').mockResolvedValue(true);
   vi.stubGlobal('URL', {
     ...URL,
     createObjectURL: () => 'blob:file',
@@ -293,5 +323,6 @@ export function stubFileSaving(): void {
   onTestFinished(() => {
     vi.unstubAllGlobals();
     click.mockRestore();
+    ask.mockRestore();
   });
 }

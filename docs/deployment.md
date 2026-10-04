@@ -7,13 +7,15 @@ Debian 12 is the same apart from where noted, and RHEL, Rocky or AlmaLinux 9 are
 ## 1. What runs where
 
 ```
-  Browser ──HTTPS──► nginx (ports 80, 443)
-                      ├── /         the built Angular app (static files in /srv/mto/www)
-                      └── /api/     ──► gunicorn on 127.0.0.1:8000 (Django, runs as the user "mto")
-                                         ├── PostgreSQL on 127.0.0.1:5432 (database "mto")
-                                         └── /var/lib/mto/media (uploaded approval letters)
+  Browser ───────HTTPS──┐
+  Phone apps ────HTTPS──┴──► nginx (ports 80, 443)
+                              ├── /         the built Angular app (static files in /srv/mto/www)
+                              └── /api/     ──► gunicorn on 127.0.0.1:8000 (Django, runs as the user "mto")
+                                                 ├── PostgreSQL on 127.0.0.1:5432 (database "mto")
+                                                 └── /var/lib/mto/media (uploaded approval letters)
 
-  systemd timers: mto-jobs (every hour: PIN expiry, overdue duty particulars, odometer, service due)
+  systemd timers: mto-jobs (every hour: PIN expiry, overdue duty particulars, odometer, service due,
+                            silent live location trips, old routes, expired phone-app sign-ins)
                   mto-backup (every night: database and letters)
 ```
 
@@ -37,7 +39,8 @@ The code belongs to root and the app's user can only read it, so a compromised a
 - **Server:** 2 CPUs, 4 GB RAM and 40 GB disk are plenty for a state's offices. Add disk for letters and backups.
 - **Name:** a host name such as `mto.example.gov.in` pointing at the server. Replace it everywhere below.
 - **Certificate:** either Let's Encrypt (the server must be reachable on port 80 from the internet) or a
-  certificate from your department's IT team.
+  certificate from your department's IT team. For the phone apps it must come from a public certificate authority,
+  as Let's Encrypt's do: the apps trust only those, not a department's own.
 - **Clock:** PINs expire after 24 hours and alerts are timed, so the clock must be right. Check that
   `timedatectl` says "System clock synchronized: yes". The app works in India time whatever the server's time zone.
 - **Map tiles:** the maps use the public OpenStreetMap tile servers. Their usage policy does not cover heavy official
@@ -295,7 +298,7 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "same-origin" always;
-    add_header Permissions-Policy "geolocation=(self), camera=(), microphone=()" always;
+    add_header Permissions-Policy "geolocation=(self), screen-wake-lock=(self), camera=(), microphone=()" always;
 
     gzip on;
     gzip_types text/css application/javascript application/json image/svg+xml;
@@ -329,6 +332,12 @@ server {
 
 The policy above was tried against the production build: the pages, styles, map and logins all work with it.
 Keep `add_header` lines only in the `server` block. nginx drops them for any `location` that adds its own.
+
+Live location needs nothing more from the server. Browsers give a page the location only over HTTPS, which this
+setup has; `geolocation=(self)` and `screen-wake-lock=(self)` let the app ask for the location and keep a driver's
+screen on while sharing. The Android and iPhone apps sign in with device tokens through the same `/api/` and need no
+other server change: build them with this server's `https://` address (see [mobile-apps.md](mobile-apps.md)). They
+trust only the public certificate authorities a phone comes with: Let's Encrypt works, a department's own does not.
 
 ```bash
 sudo ln -s /etc/nginx/sites-available/mto /etc/nginx/sites-enabled/mto
@@ -459,3 +468,10 @@ sessions across a restart.
 - [ ] Backups run every night and are copied off the server; a restore has been tried.
 - [ ] `sudo apt upgrade` (or `dnf upgrade`) is run regularly, and the app is updated when new versions come out.
 - [ ] The tile service and the use of both emblems are approved by your department.
+- [ ] The scheduled jobs timer runs (`systemctl list-timers` shows `mto-jobs.timer`): besides the alerts, it ends live
+  location trips that went silent, deletes routes 90 days after their trip ends and deletes expired phone-app
+  sign-ins.
+- [ ] Your department has approved recording drivers' locations while they share them on duty, and keeping the routes
+  for 90 days (`LOCATION_KEEP_DAYS` in `backend/config/settings.py`).
+- [ ] The phone apps are built with this server's `https://` address (`frontend/src/environments/environment.mobile.ts`)
+  and tried on real phones; the Android app's signing key and its passwords are kept safe, off the server.

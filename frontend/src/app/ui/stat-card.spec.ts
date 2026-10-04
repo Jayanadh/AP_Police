@@ -33,4 +33,12 @@ describe('StatCard', () => {
     const danger = await render({ icon: 'bell', label: 'A', value: 1, tone: 'danger' });
     expect(danger.querySelector('.stat')?.classList.contains('stat-danger')).toBe(true);
   });
+
+  it.each(['primary', 'success', 'info', 'violet', 'teal', 'warning', 'danger'])(
+    'gives each figure its own colour: %s',
+    async (tone) => {
+      const el = await render({ icon: 'fuel', label: 'A', value: 1, tone });
+      expect(el.querySelector('.stat')?.classList.contains(`stat-${tone}`)).toBe(true);
+    },
+  );
 });

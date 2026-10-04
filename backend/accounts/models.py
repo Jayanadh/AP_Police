@@ -136,3 +136,24 @@ class OfficerTransfer(models.Model):
 
     def __str__(self) -> str:
         return f"Transfer #{self.pk} of {self.officer_id} to {self.to_unit_id} ({self.status})"
+
+
+class DeviceToken(models.Model):
+    """A phone app's sign-in. The app keeps the token; only its SHA-256 is stored. It stops working when it expires,
+    when the app signs out, when the person's password changes on any other device, or when they are no longer
+    active."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="device_tokens")
+    key_hash = models.CharField(max_length=64, unique=True)
+    # A mark of the password the token was given under (Django's session hash of it): a new password ends it.
+    password_mark = models.CharField(max_length=128)
+    name = models.CharField(max_length=100, blank=True)  # the device, as the app names it
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"Device token #{self.pk} of {self.user_id}"

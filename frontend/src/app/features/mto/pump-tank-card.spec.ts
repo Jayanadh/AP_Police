@@ -13,6 +13,7 @@ const PETROL: PumpTank = {
   low_stock_threshold_litres: '100.00',
   capacity_litres: '1000.00',
   is_low: false,
+  opening_set: true,
 };
 
 const DIESEL: PumpTank = {
@@ -22,12 +23,13 @@ const DIESEL: PumpTank = {
   low_stock_threshold_litres: '100.00',
   capacity_litres: null,
   is_low: true,
+  opening_set: true,
 };
 
 const entry = (overrides: Partial<StockEntry> = {}): StockEntry => ({
   id: 1,
-  kind: 'MEASUREMENT',
-  kind_label: 'Morning measurement',
+  kind: 'OPENING',
+  kind_label: 'Opening stock',
   litres: '500.00',
   stock_before: '480.00',
   stock_after: '500.00',
@@ -41,7 +43,6 @@ const asTank = (tank: PumpTank, overrides: Partial<Tank> = {}): Tank => ({
   ...tank,
   pump: 3,
   pump_name: 'Nellore Police Pump',
-  last_measured_at: null,
   ...overrides,
 });
 
@@ -148,7 +149,7 @@ describe('PumpTankCard', () => {
       Array.from(tr.querySelectorAll('td')).map((td) => text(td)),
     );
     expect(rows).toEqual([
-      ['Morning measurement', '500 L', '480 L → 500 L', 'Lakshmi Devi', '02 Oct 2026, 6:30 am'],
+      ['Opening stock', '500 L', '480 L → 500 L', 'Lakshmi Devi', '02 Oct 2026, 6:30 am'],
       ['Fill', '30.5 L', '500 L → 469.5 L', 'Ravi', '02 Oct 2026, 9:15 am'],
     ]);
     expect(Array.from(el.querySelectorAll('th')).map((th) => text(th))).toEqual([
@@ -240,13 +241,12 @@ describe('PumpTankCard', () => {
     );
   });
 
-  it('refuses a negative capacity before sending anything', async () => {
-    const { el, http, fill, save, fixture, text } = await setup();
+  it('takes no minus sign, so the levels cannot be negative', async () => {
+    const { fill, field } = await setup();
     fill('capacity', '-5');
-    save();
-    await fixture.whenStable();
-    http.expectNone('/api/tanks/31/');
-    expect(text(el.querySelector('[role="alert"]'))).toBe('The capacity cannot be negative.');
+    fill('threshold', '-150.255');
+    expect(field('capacity').value).toBe('5');
+    expect(field('threshold').value).toBe('150.25');
   });
 
   it('shows what the server says when it refuses the change', async () => {
@@ -265,6 +265,67 @@ describe('PumpTankCard', () => {
     );
     expect(changed).toEqual([]);
     expect((el.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  describe('the opening stock', () => {
+    const NEW_TANK: PumpTank = { ...PETROL, current_stock_litres: '0.00', opening_set: false };
+
+    it('is asked for once, while nothing has been recorded for the tank', async () => {
+      const { el, text } = await setup(NEW_TANK, []);
+      expect(text(el.querySelector('label[for="tank-31-opening"]'))).toBe('Opening stock (L)');
+      expect(text(el.querySelector('.opening .hint'))).toContain('only once');
+
+      const set = await setup(PETROL);
+      expect(set.el.querySelector('#tank-31-opening')).toBeNull();
+    });
+
+    it('is sent, tells the page, and reads the entries again', async () => {
+      const { http, fill, button, changed, fixture, toasts, replyEntries } = await setup(
+        NEW_TANK,
+        [],
+      );
+      fill('opening', '4500');
+
+      button('Set opening stock')!.click();
+      const req = http.expectOne('/api/tanks/31/opening/');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({ litres: 4500, note: '' });
+      const saved = asTank(NEW_TANK, { current_stock_litres: '4500.00', opening_set: true });
+      req.flush(saved);
+      await fixture.whenStable();
+      await replyEntries([
+        entry({ litres: '4500.00', stock_before: '0.00', stock_after: '4500.00' }),
+      ]);
+
+      expect(changed).toEqual([saved]);
+      expect(toasts()[0]).toMatchObject({ text: 'Petrol opening stock set.', tone: 'success' });
+    });
+
+    it('asks for a number of litres, 0 or more, before sending anything', async () => {
+      const { el, fill, button, fixture, text } = await setup(NEW_TANK, []);
+      fill('opening', '');
+      button('Set opening stock')!.click();
+      await fixture.whenStable();
+      expect(text(el.querySelector('.opening [role="alert"]'))).toBe(
+        'Enter the opening stock in litres, 0 or more.',
+      );
+    });
+
+    it('shows what the server says when it refuses', async () => {
+      const { el, http, fill, button, fixture, text } = await setup(NEW_TANK, []);
+      fill('opening', '100');
+      button('Set opening stock')!.click();
+      http
+        .expectOne('/api/tanks/31/opening/')
+        .flush(
+          { detail: "This tank's opening stock is already set." },
+          { status: 400, statusText: 'Bad Request' },
+        );
+      await fixture.whenStable();
+      expect(text(el.querySelector('.opening [role="alert"]'))).toBe(
+        "This tank's opening stock is already set.",
+      );
+    });
   });
 
   it('keeps what is being typed when the tank is read again with the same levels', async () => {

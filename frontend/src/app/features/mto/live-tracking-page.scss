@@ -1,0 +1,255 @@
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+
+  @media (min-width: 1000px) {
+    grid-template-columns: minmax(0, 7fr) minmax(330px, 4fr);
+    align-items: start;
+  }
+}
+
+// The map stays in view beside the list on a wide screen.
+.map-card {
+  --map-height: 360px;
+  position: relative;
+  min-width: 0;
+
+  @media (min-width: 1000px) {
+    --map-height: max(440px, calc(100vh - 190px));
+    position: sticky;
+    top: 84px;
+  }
+}
+
+// At the top left: the zoom buttons are on the right, and the map's credits along the bottom stay in view.
+.tracking-bar {
+  position: absolute;
+  top: 12px;
+  right: 68px;
+  left: 12px;
+  z-index: 600; // above Leaflet's panes, which stay inside the map's own layer
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-float);
+  font-size: 13.5px;
+
+  .stop-tracking {
+    flex: none;
+    width: 36px;
+    height: 36px;
+  }
+}
+
+.tracking-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 25%, transparent);
+}
+
+.tracking-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.list-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.list-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+
+  h2 {
+    font-size: 18px;
+  }
+}
+
+.summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.live-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--success) 16%, white);
+  color: color-mix(in srgb, var(--success) 60%, black);
+  font-weight: 800;
+}
+
+.picked-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 8px 8px 14px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--primary) 16%, white);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.nobody {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 14px;
+
+  app-icon {
+    margin-top: 1px;
+  }
+}
+
+// The checkbox, then the details with the buttons under them: the list is narrow beside the map.
+.vehicle-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px 12px;
+  padding: 14px 12px;
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--success);
+  border-radius: var(--radius-sm);
+
+  & + & {
+    margin-top: 10px;
+  }
+
+  &.stale {
+    border-left-color: var(--warning);
+
+    .seen {
+      color: color-mix(in srgb, var(--warning) 45%, black);
+    }
+
+    .seen-dot {
+      background: var(--warning);
+    }
+  }
+
+  &.tracked {
+    border-color: var(--primary-strong);
+    border-left-color: var(--primary-strong);
+    background: color-mix(in srgb, var(--primary) 8%, white);
+  }
+}
+
+.pick {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: var(--primary-strong);
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+
+  .muted {
+    font-size: 13px;
+  }
+}
+
+.reg {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.driver {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.duty {
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.seen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: color-mix(in srgb, var(--success) 60%, black);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.seen-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.row-actions {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .call {
+    width: 38px;
+    height: 38px;
+  }
+}
+
+.group-title {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.quiet-row {
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  font-size: 14px;
+}
+
+.quiet-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

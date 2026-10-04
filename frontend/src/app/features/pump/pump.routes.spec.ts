@@ -14,7 +14,6 @@ const SUMMARY = {
   tanks: [],
   waiting: 0,
   today_fills: { count: 0, litres: '0.00' },
-  month_fills: { petrol_litres: '0.00', diesel_litres: '0.00' },
 };
 
 describe('Pump routes', () => {

@@ -128,7 +128,6 @@ export type PumpDashboard = DashboardBase<'PUMP_OPERATOR'> & {
   pump: { id: number; name: string; kind: PumpKind };
   tanks: DashboardTank[];
   today_fills: { count: number; litres: string };
-  month_fills: { petrol_litres: string; diesel_litres: string };
   /** How many drivers' requests wait at this pump to be filled. */
   waiting: number;
 };

@@ -60,13 +60,14 @@ export function navItemsFor(user: Me): NavItem[] {
       return [
         { label: 'Dashboard', link: '/mto', icon: 'home', primary: true },
         { label: 'Vehicles', link: '/mto/vehicles', icon: 'car', primary: true },
+        { label: 'Live tracking', link: '/mto/live', icon: 'map', primary: true },
         { label: 'Drivers', link: '/mto/drivers', icon: 'user' },
         { label: 'Officers', link: '/mto/officers', icon: 'shield' },
         { label: 'Transfers', link: '/mto/transfers', icon: 'arrow-left-right' },
         { label: 'Pumps', link: '/mto/pumps', icon: 'fuel' },
         { label: 'Additional quota', link: '/mto/additional-quota', icon: 'file-plus' },
         { label: 'Emergencies', link: '/mto/emergencies', icon: 'alert-triangle', primary: true },
-        { label: 'Fuel statement', link: '/mto/fuel', icon: 'droplet', primary: true },
+        { label: 'Fuel statement', link: '/mto/fuel', icon: 'droplet' },
         { label: 'Bunk statements', link: '/mto/statements', icon: 'file-text' },
         { label: 'Odometer', link: '/mto/odometer', icon: 'gauge' },
         { label: 'Servicing', link: '/mto/servicing', icon: 'wrench' },
@@ -81,7 +82,8 @@ export function navItemsFor(user: Me): NavItem[] {
         { label: 'Home', link: '/driver', icon: 'home', primary: true },
         { label: 'Pumps', link: '/driver/pumps', icon: 'compass', primary: true },
         { label: 'Fuel', link: '/driver/fuel', icon: 'card', primary: true },
-        { label: 'Odometer', link: '/driver/odometer', icon: 'gauge', primary: true },
+        { label: 'Live location', link: '/driver/live', icon: 'radio', primary: true },
+        { label: 'Odometer', link: '/driver/odometer', icon: 'gauge' },
         { label: 'Fuel statement', link: '/driver/statement', icon: 'droplet' },
       ];
     case 'PUMP_OPERATOR':

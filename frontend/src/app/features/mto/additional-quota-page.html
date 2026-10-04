@@ -80,7 +80,7 @@
               [icon]="stat.icon"
               [label]="stat.label"
               [value]="litres(stat.value)"
-              [tone]="stat.negative ? 'danger' : 'default'"
+              [tone]="stat.tone"
             />
           }
         </div>
@@ -113,10 +113,8 @@
           <label for="grant-litres">Quantity (L) <span aria-hidden="true">*</span></label>
           <input
             id="grant-litres"
-            type="number"
-            inputmode="decimal"
-            step="any"
-            min="0"
+            type="text"
+            appNumber="2"
             formControlName="litres"
             aria-required="true"
             [attr.aria-invalid]="errors().litres ? 'true' : null"

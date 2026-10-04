@@ -12,33 +12,14 @@ from pumps.models import Pump, PumpKind
 
 
 def fuel_statement(user, period: Period, unit_id: int | None = None):
-    """Every fill of the caller's statement (date, vehicle, fuel and litres first), then its tables."""
+    """The caller's statement as the page shows it: the fills (date first), the totals, then the other tables."""
     data = report.fuel_statement(user, period, unit_id)
-    at_pump = user.role == Role.PUMP_OPERATOR
-    fill_headers = ["Date", "Vehicle", "Fuel", "Litres", "Emergency (L)", "Driver", "Pump", "Office"]
-    if not at_pump:
-        fill_headers.append("Duty particulars")
-    fills = []
-    for fill in report.statement_fills(user, period, unit_id):
-        row = [
-            fill.filled_at, fill.vehicle.registration_number, _fuel(fill.fuel_type), fill.litres_filled,
-            fill.emergency_litres, fill.driver.full_name, fill.pump.name if fill.pump else "", fill.vehicle.unit.name,
-        ]
-        if not at_pump:
-            row.append(fill.duty_particulars)
-        fills.append(row)
-
-    sheets = [
-        Sheet("Fills", fill_headers, fills),
-        Sheet(
-            "Totals",
-            ["Period", "Fills", "Petrol (L)", "Diesel (L)", "Total (L)", "Emergency (L)"],
-            [[
-                data["label"], data["fills"], Decimal(data["petrol_litres"]), Decimal(data["diesel_litres"]),
-                Decimal(data["litres"]), Decimal(data["emergency_litres"]),
-            ]],
-        ),
-    ]
+    if user.role == Role.PUMP_OPERATOR:
+        sheets = _pump_fills_and_totals(user, period, data)
+    elif user.role in (Role.DRIVER, Role.OFFICER):
+        sheets = _own_fills_and_totals(user, period, data)
+    else:
+        sheets = _office_fills_and_totals(user, period, unit_id, data)
     if data["by_unit"] is not None:
         sheets.append(Sheet(
             "By office",
@@ -72,15 +53,78 @@ def fuel_statement(user, period: Period, unit_id: int | None = None):
     if data["stock"] is not None:
         sheets.append(Sheet(
             "Stock",
-            ["Fuel", "Opening (L)", "Received (L)", "Filled (L)", "Measured change (L)", "Closing (L)"],
+            ["Fuel", "Opening (L)", "Received (L)", "Filled (L)", "Closing (L)"],
             [
                 [_fuel(row["fuel_type"]), Decimal(row["opening_litres"]), Decimal(row["received_litres"]),
-                 Decimal(row["dispensed_litres"]), Decimal(row["measured_change_litres"]),
-                 Decimal(row["closing_litres"])]
+                 Decimal(row["dispensed_litres"]), Decimal(row["closing_litres"])]
                 for row in data["stock"]
             ],
         ))
-    return xlsx_response(f"fuel-statement-{_dates(period)}.xlsx", sheets)
+    return xlsx_response(f"fuel-statement-{period.file_part}.xlsx", sheets)
+
+
+def _office_fills_and_totals(user, period: Period, unit_id: int | None, data: dict) -> list[Sheet]:
+    """The MTO's and the PTO's: every column, and the totals with the emergency litres."""
+    fills = [
+        [
+            fill.filled_at, fill.vehicle.registration_number, _fuel(fill.fuel_type), fill.litres_filled,
+            fill.emergency_litres, fill.driver.full_name, fill.pump.name if fill.pump else "", fill.vehicle.unit.name,
+            fill.duty_particulars,
+        ]
+        for fill in report.statement_fills(user, period, unit_id)
+    ]
+    return [
+        Sheet(
+            "Fills",
+            ["Date", "Vehicle", "Fuel", "Litres", "Emergency (L)", "Driver", "Pump", "Office", "Duty particulars"],
+            fills,
+        ),
+        Sheet(
+            "Totals",
+            ["Period", "Fills", "Petrol (L)", "Diesel (L)", "Total (L)", "Emergency (L)"],
+            [[
+                data["label"], data["fills"], Decimal(data["petrol_litres"]), Decimal(data["diesel_litres"]),
+                Decimal(data["litres"]), Decimal(data["emergency_litres"]),
+            ]],
+        ),
+    ]
+
+
+def _own_fills_and_totals(user, period: Period, data: dict) -> list[Sheet]:
+    """An officer's or a driver's: the fills of their own vehicles, so no vehicle or fuel columns."""
+    fills = [
+        [fill.filled_at, fill.litres_filled, fill.emergency_litres, fill.pump.name if fill.pump else "",
+         fill.duty_particulars or None]
+        for fill in report.statement_fills(user, period)
+    ]
+    return [
+        Sheet("Fills", ["Date", "Litres", "Emergency (L)", "Pump", "Duty particulars"], fills),
+        Sheet(
+            "Totals",
+            ["Period", "Fills", "Total (L)", "Emergency (L)"],
+            [[data["label"], data["fills"], Decimal(data["litres"]), Decimal(data["emergency_litres"])]],
+        ),
+    ]
+
+
+def _pump_fills_and_totals(user, period: Period, data: dict) -> list[Sheet]:
+    """A pump's staff's: each fill with the vehicle's officer; emergencies do not matter at the pump."""
+    fills = [
+        [fill.filled_at, fill.vehicle.registration_number, _fuel(fill.fuel_type), fill.litres_filled,
+         fill.officer_name]
+        for fill in report.pump_fills(user.pump_id, period).order_by("filled_at", "id")
+    ]
+    return [
+        Sheet("Fills", ["Date", "Vehicle", "Fuel", "Litres", "Officer"], fills),
+        Sheet(
+            "Totals",
+            ["Period", "Fills", "Petrol (L)", "Diesel (L)", "Total (L)"],
+            [[
+                data["label"], data["fills"], Decimal(data["petrol_litres"]), Decimal(data["diesel_litres"]),
+                Decimal(data["litres"]),
+            ]],
+        ),
+    ]
 
 
 def bunk_statement(pump: Pump, period: Period):
@@ -102,12 +146,8 @@ def bunk_statement(pump: Pump, period: Period):
             ]],
         ),
     ]
-    return xlsx_response(f"bunk-statement-{slugify(pump.name) or pump.pk}-{_dates(period)}.xlsx", sheets)
+    return xlsx_response(f"bunk-statement-{slugify(pump.name) or pump.pk}-{period.file_part}.xlsx", sheets)
 
 
 def _fuel(fuel_type: str) -> str:
     return FuelType(fuel_type).label
-
-
-def _dates(period: Period) -> str:
-    return f"{period.start.isoformat()}-to-{period.end.isoformat()}"

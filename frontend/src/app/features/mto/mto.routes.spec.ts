@@ -70,6 +70,18 @@ describe('MTO routes', () => {
     expect(TestBed.inject(Title).getTitle()).toBe('Vehicles');
   });
 
+  it('/mto/live is the live tracking page', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/mto/live');
+    TestBed.inject(HttpTestingController).expectOne('/api/tracking/live/').flush([]);
+    await harness.fixture.whenStable();
+    const el = harness.fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-live-tracking-page h1')?.textContent?.trim()).toBe(
+      'Live tracking',
+    );
+    expect(TestBed.inject(Title).getTitle()).toBe('Live tracking');
+  });
+
   it('/mto/vehicles/:id is the page of that vehicle', async () => {
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl('/mto/vehicles/5');

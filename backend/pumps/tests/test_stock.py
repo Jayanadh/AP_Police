@@ -39,33 +39,54 @@ def stock_of(tank):
     return tank.current_stock_litres
 
 
-def test_measurement_sets_the_stock_and_logs_before_and_after(diesel, staff):
-    entry = stock.record_measurement(diesel, Decimal("280.50"), staff, note="Dip stick")
+def test_the_opening_stock_sets_the_stock_and_logs_before_and_after(diesel, mto):
+    entry = stock.record_opening(diesel, Decimal("280.50"), mto, note="Dip stick on day one")
 
     assert stock_of(diesel) == Decimal("280.50")
-    assert entry.kind == StockEntryKind.MEASUREMENT
+    assert entry.kind == StockEntryKind.OPENING
     assert (entry.litres, entry.stock_before, entry.stock_after) == (
         Decimal("280.50"),
         Decimal("300"),
         Decimal("280.50"),
     )
-    assert entry.note == "Dip stick"
-    assert entry.recorded_by == staff
+    assert entry.note == "Dip stick on day one"
+    assert entry.recorded_by == mto
     assert entry.tank == diesel
     assert StockEntry.objects.get() == entry
 
 
-def test_a_measurement_can_be_zero(diesel, staff):
-    stock.record_measurement(diesel, Decimal("0"), staff)
+def test_the_opening_stock_can_be_zero(diesel, mto):
+    stock.record_opening(diesel, Decimal("0"), mto)
     assert stock_of(diesel) == Decimal("0")
 
 
-def test_a_negative_measurement_is_refused(diesel, staff):
+def test_a_negative_opening_stock_is_refused(diesel, mto):
     with pytest.raises(BusinessRuleError) as error:
-        stock.record_measurement(diesel, Decimal("-1"), staff)
+        stock.record_opening(diesel, Decimal("-1"), mto)
     assert str(error.value.detail) == "Stock can't be negative."
     assert stock_of(diesel) == Decimal("300")
     assert StockEntry.objects.count() == 0
+
+
+@pytest.mark.parametrize("first", ["opening", "receipt", "fill"])
+def test_the_opening_stock_is_set_only_before_anything_else_happened_to_the_tank(diesel, mto, staff, first):
+    """After that the stock moves only with tanker receipts and fills, never by being set again."""
+    if first == "opening":
+        stock.record_opening(diesel, Decimal("280"), mto)
+    elif first == "receipt":
+        stock.record_receipt(diesel, Decimal("100"), staff)
+    else:
+        stock.dispense(diesel, Decimal("10"), staff)
+    before = stock_of(diesel)
+
+    with pytest.raises(BusinessRuleError) as error:
+        stock.record_opening(diesel, Decimal("999"), mto)
+
+    assert str(error.value.detail) == (
+        "This tank's opening stock is already set. Its stock now changes only with tanker receipts and fills."
+    )
+    assert stock_of(diesel) == before
+    assert StockEntry.objects.count() == 1
 
 
 def test_receipt_adds_to_the_stock(diesel, staff):
@@ -115,7 +136,7 @@ def test_dispensing_more_than_the_stock_is_refused_and_changes_nothing(pump, sta
         stock.dispense(tank, Decimal("40.01"), staff)
 
     assert str(error.value.detail) == (
-        "Only 40.00 L of diesel in stock. Record a fresh morning measurement if this is wrong."
+        "Only 40.00 L of diesel in stock."
     )
     assert stock_of(tank) == Decimal("40")
     assert StockEntry.objects.count() == 0
@@ -154,7 +175,7 @@ def test_the_tank_is_locked_while_its_stock_changes(diesel, staff):
 def test_dropping_below_the_threshold_alerts_the_mto_and_the_staff_once(mto, pump, diesel, staff):
     other_staff = PumpStaffFactory(pump=pump, unit=pump.unit)
     paused_staff = PumpStaffFactory(pump=pump, unit=pump.unit, status="PAUSED")
-    stock.record_measurement(diesel, Decimal("120"), staff)
+    stock.record_opening(diesel, Decimal("120"), mto)
     assert Notification.objects.count() == 0  # 120 is still above the 100 L alert level
 
     stock.dispense(diesel, Decimal("30"), staff)  # 90 L left
@@ -202,13 +223,13 @@ def test_a_receipt_back_above_the_threshold_rearms_the_alert(mto, diesel, staff)
     assert Notification.objects.filter(recipient=staff).count() == 2
 
 
-def test_a_measurement_below_the_threshold_alerts_too(mto, diesel, staff):
-    stock.record_measurement(diesel, Decimal("60"), staff)
+def test_an_opening_stock_below_the_threshold_alerts_too(mto, diesel):
+    stock.record_opening(diesel, Decimal("60"), mto)
     assert Notification.objects.filter(recipient=mto).count() == 1
 
 
-def test_a_stock_of_exactly_the_threshold_is_not_low(mto, diesel, staff):
-    stock.record_measurement(diesel, Decimal("100"), staff)
+def test_a_stock_of_exactly_the_threshold_is_not_low(mto, diesel):
+    stock.record_opening(diesel, Decimal("100"), mto)
     assert Notification.objects.count() == 0
     diesel.refresh_from_db()
     assert diesel.low_stock_alerted is False
